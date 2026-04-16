@@ -240,11 +240,12 @@ REGLAS:
 - Si dice su nombre en cualquier momento, ponlo en extracted_data.nombre.
 - send_raffle_image=true SOLO la primera vez, al inicio o cuando pidan ver la imagen.
 - send_bank_details=true SOLO cuando confirme que quiere boletos y esté listo para pagar. NO lo pongas en true más de una vez por conversación.
-- boletos_solicitados: número de boletos que quiere comprar (entero). Si dice "quiero participar" sin decir cuántos, pregúntale.
+- CRÍTICO BOLETOS: Si el usuario escribe un número ("1", "2", "3", "uno", "dos", "1 boleto", "un boleto", "quiero 1", etc.), ESO ES la cantidad de boletos. Pon extracted_data.boletos_solicitados=ese número, confirma el total, y AVANZA a next_step="eligiendo_pago". NUNCA vuelvas a preguntar cuántos boletos si ya dio un número.
 - Si pregunta por múltiples boletos, calcula: boletos × \$3,000 y menciona el total.
 - Si el usuario dice que NO quiere o no puede, ponlo como next_step="no_interesado" y respeta su decisión.
-- IMPORTANTE: next_step SIEMPRE debe avanzar cuando el usuario responde correctamente. No repitas el mismo paso si ya dio la info.
-- En "esperando_comprobante", SIEMPRE mantén next_step="esperando_comprobante" si el mensaje es texto. Solo el sistema cambia este paso cuando recibe una imagen.
+- IMPORTANTE: next_step SIEMPRE debe avanzar cuando el usuario responde correctamente. NUNCA repitas la misma pregunta. Si el paso actual es "interesado" y el usuario da un número, el next_step DEBE ser "eligiendo_pago".
+- En "esperando_comprobante", SIEMPRE mantén next_step="esperando_comprobante" si el mensaje es texto.
+- En "esperando_pago_tarjeta", SIEMPRE mantén next_step="esperando_pago_tarjeta" si el mensaje es texto.
 PROMPT;
     }
 

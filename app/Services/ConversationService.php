@@ -109,6 +109,19 @@ class ConversationService
             $history,
         );
 
+        // 6b. Force advance if AI stuck on interesado and user gave a number
+        if ($state->current_step === 'interesado' && ($aiResponse['next_step'] ?? '') === 'interesado') {
+            $num = $this->extractNumberFromText($text);
+            if ($num > 0) {
+                $aiResponse['extracted_data']['boletos_solicitados'] = $num;
+                $aiResponse['next_step'] = 'eligiendo_pago';
+                $total = number_format($num * 3000, 0);
+                $ticketWord = $num === 1 ? '1 boleto' : "{$num} boletos";
+                $aiResponse['response_text'] = "\xC2\xA1Perfecto! {$ticketWord} = \${$total} MXN \xF0\x9F\x92\xAA\n\n\xC2\xBFC\xC3\xB3mo prefieres pagar?\n\xF0\x9F\x92\xB3 Tarjeta o \xF0\x9F\x8F\xA6 Transferencia bancaria?";
+                Log::info('Forced advance from interesado to eligiendo_pago', ['boletos' => $num]);
+            }
+        }
+
         // 7. Send raffle image if AI requested
         if ($aiResponse['send_raffle_image']) {
             $this->sendRaffleImage($from);
@@ -490,5 +503,33 @@ class ConversationService
             && in_array($contact->status, ['nuevo', 'contactado', 'leido'])) {
             $contact->update(['status' => 'interesado']);
         }
+    }
+
+    /**
+     * Extract a number from user text (e.g., "1", "1 boleto", "dos", "un boleto").
+     */
+    private function extractNumberFromText(string $text): int
+    {
+        $text = mb_strtolower(trim($text));
+
+        // Direct number
+        if (preg_match('/^(\d+)/', $text, $m)) {
+            return (int) $m[1];
+        }
+
+        // Spanish words
+        $words = [
+            'un' => 1, 'uno' => 1, 'una' => 1,
+            'dos' => 2, 'tres' => 3, 'cuatro' => 4, 'cinco' => 5,
+            'seis' => 6, 'siete' => 7, 'ocho' => 8, 'nueve' => 9, 'diez' => 10,
+        ];
+
+        foreach ($words as $word => $num) {
+            if (str_starts_with($text, $word . ' ') || $text === $word) {
+                return $num;
+            }
+        }
+
+        return 0;
     }
 }
