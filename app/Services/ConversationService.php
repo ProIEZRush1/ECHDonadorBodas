@@ -109,16 +109,22 @@ class ConversationService
             $history,
         );
 
-        // 6b. Force advance if AI stuck on interesado and user gave a number
-        if ($state->current_step === 'interesado' && ($aiResponse['next_step'] ?? '') === 'interesado') {
+        // 6b. Force advance if AI stuck and user gave a number of boletos
+        $stuckSteps = ['interesado', 'presentando_rifa', 'inicio'];
+        $nextStep = $aiResponse['next_step'] ?? '';
+        if (in_array($state->current_step, $stuckSteps) && in_array($nextStep, $stuckSteps)) {
             $num = $this->extractNumberFromText($text);
+            // Also check if boletos was extracted by AI but step didn't advance
+            if ($num === 0 && !empty($aiResponse['extracted_data']['boletos_solicitados'])) {
+                $num = (int) $aiResponse['extracted_data']['boletos_solicitados'];
+            }
             if ($num > 0) {
                 $aiResponse['extracted_data']['boletos_solicitados'] = $num;
                 $aiResponse['next_step'] = 'eligiendo_pago';
                 $total = number_format($num * 3000, 0);
                 $ticketWord = $num === 1 ? '1 boleto' : "{$num} boletos";
                 $aiResponse['response_text'] = "\xC2\xA1Perfecto! {$ticketWord} = \${$total} MXN \xF0\x9F\x92\xAA\n\n\xC2\xBFC\xC3\xB3mo prefieres pagar?\n\xF0\x9F\x92\xB3 Tarjeta o \xF0\x9F\x8F\xA6 Transferencia bancaria?";
-                Log::info('Forced advance from interesado to eligiendo_pago', ['boletos' => $num]);
+                Log::info('Forced advance to eligiendo_pago', ['boletos' => $num, 'from_step' => $state->current_step]);
             }
         }
 
