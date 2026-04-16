@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks:
+      - coolify
+
+  queue:
+    build: .
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    env_file: .env
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks:
+      - coolify
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+    env_file: .env
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks:
+      - coolify
+
+volumes:
+  app_storage:
+
+networks:
+  coolify:
+    external: true
