@@ -84,6 +84,20 @@ class ConversationService
             return;
         }
 
+        // 4c. If waiting for card payment, remind them
+        if ($state->current_step === 'esperando_pago_tarjeta') {
+            $reply = "Estamos esperando que completes tu pago con tarjeta. Usa el link que te enviamos. \xF0\x9F\x92\xB3 Si tienes alg\xC3\xBAn problema, escr\xC3\xADbenos.";
+            $result = $this->whatsApp->sendMessage($from, $reply);
+            Message::create([
+                'contact_id' => $contact->id,
+                'direction' => 'out',
+                'content' => $reply,
+                'wa_message_id' => $result['messages'][0]['id'] ?? null,
+                'status' => $result ? 'sent' : 'failed',
+            ]);
+            return;
+        }
+
         // 5. Build conversation history
         $history = $this->buildConversationHistory($contact);
 
@@ -109,6 +123,27 @@ class ConversationService
                 'content' => '[Datos bancarios enviados]',
                 'status' => 'sent',
             ]);
+        }
+
+        // 8b. Send Stripe checkout link if AI chose card payment
+        if (($aiResponse['next_step'] ?? '') === 'esperando_pago_tarjeta') {
+            $boletos = (int) ($aiResponse['extracted_data']['boletos_solicitados']
+                ?? $state->collected_data['boletos_solicitados'] ?? 1);
+            $stripeService = app(StripeService::class);
+            $checkoutUrl = $stripeService->createCheckoutSession($contact, $boletos);
+
+            if ($checkoutUrl) {
+                $ticketText = $boletos === 1 ? '1 boleto' : "{$boletos} boletos";
+                $payMsg = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por {$ticketText} (\$" . number_format($boletos * 3000, 0) . " MXN):\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente tus boletos!";
+                $payResult = $this->whatsApp->sendMessage($from, $payMsg);
+                Message::create([
+                    'contact_id' => $contact->id,
+                    'direction' => 'out',
+                    'content' => $payMsg,
+                    'wa_message_id' => $payResult['messages'][0]['id'] ?? null,
+                    'status' => $payResult ? 'sent' : 'failed',
+                ]);
+            }
         }
 
         // 9. Update collected data and contact status
