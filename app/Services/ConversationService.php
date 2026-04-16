@@ -84,7 +84,46 @@ class ConversationService
             return;
         }
 
-        // 4c. If waiting for card payment, remind them
+        // 4c. Handle payment method choice directly (bypass AI to avoid JSON parse failures)
+        if ($state->current_step === 'eligiendo_pago') {
+            $lowerText = mb_strtolower(trim($text));
+            $boletos = (int) ($state->collected_data['boletos_solicitados'] ?? 1);
+
+            if (str_contains($lowerText, 'tarjeta') || str_contains($lowerText, 'card') || str_contains($lowerText, 'credito') || str_contains($lowerText, 'debito')) {
+                // Card payment - generate Stripe link
+                $stripeService = app(StripeService::class);
+                $checkoutUrl = $stripeService->createCheckoutSession($contact, $boletos);
+
+                if ($checkoutUrl) {
+                    $ticketText = $boletos === 1 ? '1 boleto' : "{$boletos} boletos";
+                    $reply = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por {$ticketText} (\$" . number_format($boletos * 3000, 0) . " MXN):\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente tus boletos!";
+                } else {
+                    $reply = "Hubo un problema generando tu link de pago. Puedes pagar por transferencia bancaria. Te env\xC3\xADo los datos:";
+                    $this->whatsApp->sendBankDetails($from);
+                }
+
+                $state->update(['current_step' => 'esperando_pago_tarjeta', 'collected_data' => array_merge($state->collected_data ?? [], ['forma_pago' => 'tarjeta'])]);
+                $contact->update(['status' => 'datos_enviados']);
+                $result = $this->whatsApp->sendMessage($from, $reply);
+                Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $reply, 'wa_message_id' => $result['messages'][0]['id'] ?? null, 'status' => $result ? 'sent' : 'failed']);
+                return;
+
+            } elseif (str_contains($lowerText, 'transfer') || str_contains($lowerText, 'banco') || str_contains($lowerText, 'bancaria') || str_contains($lowerText, 'clabe')) {
+                // Bank transfer
+                $this->whatsApp->sendBankDetails($from);
+                Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => '[Datos bancarios enviados]', 'status' => 'sent']);
+
+                $reply = "Una vez que hagas la transferencia, env\xC3\xADanos la foto del comprobante por aqu\xC3\xAD. \xF0\x9F\x93\xB8";
+                $state->update(['current_step' => 'esperando_comprobante', 'collected_data' => array_merge($state->collected_data ?? [], ['forma_pago' => 'transferencia'])]);
+                $contact->update(['status' => 'datos_enviados']);
+                $result = $this->whatsApp->sendMessage($from, $reply);
+                Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $reply, 'wa_message_id' => $result['messages'][0]['id'] ?? null, 'status' => $result ? 'sent' : 'failed']);
+                return;
+            }
+            // If unclear, fall through to AI
+        }
+
+        // 4d. If waiting for card payment, remind them
         if ($state->current_step === 'esperando_pago_tarjeta') {
             $reply = "Estamos esperando que completes tu pago con tarjeta. Usa el link que te enviamos. \xF0\x9F\x92\xB3 Si tienes alg\xC3\xBAn problema, escr\xC3\xADbenos.";
             $result = $this->whatsApp->sendMessage($from, $reply);
