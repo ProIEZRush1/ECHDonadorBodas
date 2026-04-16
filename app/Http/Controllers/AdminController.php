@@ -48,7 +48,7 @@ class AdminController extends Controller
 
         // Countdown to raffle
         $sorteoDate = \Carbon\Carbon::parse('2027-01-30');
-        $diasRestantes = now()->diffInDays($sorteoDate, false);
+        $diasRestantes = (int) now()->diffInDays($sorteoDate, false);
 
         $recentContacts = Contact::orderByDesc('ultimo_contacto')->take(20)->get();
 
