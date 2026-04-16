@@ -51,7 +51,6 @@ class StripeService
                     'telefono' => $contact->telefono,
                     'boletos' => (string) $boletos,
                 ],
-                'customer_email' => $contact->email,
             ]);
 
             Log::info('Stripe checkout created', [
