@@ -123,6 +123,33 @@ class WhatsAppService
             return null;
         }
 
+        $mediaId = \App\Models\Setting::getValue('media_id_rifa_image');
+
+        $components = [
+            [
+                'type' => 'body',
+                'parameters' => [
+                    [
+                        'type' => 'text',
+                        'text' => $contactName,
+                    ],
+                ],
+            ],
+        ];
+
+        // Include image header if media ID is available
+        if ($mediaId) {
+            array_unshift($components, [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'image',
+                        'image' => ['id' => $mediaId],
+                    ],
+                ],
+            ]);
+        }
+
         return $this->sendWithRetry($phoneId, [
             'messaging_product' => 'whatsapp',
             'to' => $to,
@@ -130,17 +157,7 @@ class WhatsAppService
             'template' => [
                 'name' => 'rifa_boda',
                 'language' => ['code' => 'es'],
-                'components' => [
-                    [
-                        'type' => 'body',
-                        'parameters' => [
-                            [
-                                'type' => 'text',
-                                'text' => $contactName,
-                            ],
-                        ],
-                    ],
-                ],
+                'components' => $components,
             ],
         ]);
     }
