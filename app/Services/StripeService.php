@@ -24,9 +24,16 @@ class StripeService
      */
     public function createCheckoutSession(Contact $contact, int $boletos = 1): ?string
     {
-        $amount = $boletos * 3000 * 100; // $3,000 MXN per ticket, in centavos
-        $ticketLabel = $boletos === 1 ? '1 Boleto de Rifa' : "{$boletos} Boletos de Rifa";
+        return $this->createCheckoutSessionCustom($contact, $boletos * 3000, $boletos === 1 ? '1 Boleto de Rifa' : "{$boletos} Boletos de Rifa");
+    }
 
+    /**
+     * Create a Stripe Checkout session for any amount.
+     *
+     * @return string|null The checkout URL
+     */
+    public function createCheckoutSessionCustom(Contact $contact, int $amountMxn, string $label = 'Donativo'): ?string
+    {
         try {
             $session = $this->stripe->checkout->sessions->create([
                 'payment_method_types' => ['card'],
@@ -35,12 +42,12 @@ class StripeService
                         'price_data' => [
                             'currency' => 'mxn',
                             'product_data' => [
-                                'name' => $ticketLabel,
-                                'description' => 'Rifa solidaria - Hajnasat Kala. Sorteo: 30 de enero 2027. Premio: $100,000 MXN.',
+                                'name' => $label,
+                                'description' => 'Rifa solidaria - Hajnasat Kala. Apoyo para boda.',
                             ],
-                            'unit_amount' => 3000 * 100, // $3,000 MXN in centavos
+                            'unit_amount' => $amountMxn * 100,
                         ],
-                        'quantity' => $boletos,
+                        'quantity' => 1,
                     ],
                 ],
                 'mode' => 'payment',
@@ -49,7 +56,8 @@ class StripeService
                 'metadata' => [
                     'contact_id' => (string) $contact->id,
                     'telefono' => $contact->telefono,
-                    'boletos' => (string) $boletos,
+                    'boletos' => (string) ($amountMxn >= 3000 ? (int) floor($amountMxn / 3000) : 0),
+                    'amount_mxn' => (string) $amountMxn,
                 ],
             ]);
 

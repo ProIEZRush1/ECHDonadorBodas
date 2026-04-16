@@ -87,16 +87,17 @@ class ConversationService
         // 4c. Handle payment method choice directly (bypass AI to avoid JSON parse failures)
         if ($state->current_step === 'eligiendo_pago') {
             $lowerText = mb_strtolower(trim($text));
-            $boletos = (int) ($state->collected_data['boletos_solicitados'] ?? 1);
+            $boletos = (int) ($state->collected_data['boletos_solicitados'] ?? 0);
+            $montoCustom = (int) ($state->collected_data['monto_personalizado'] ?? 0);
+            $totalAmount = $boletos > 0 ? $boletos * 3000 : ($montoCustom > 0 ? $montoCustom : 3000);
 
             if (str_contains($lowerText, 'tarjeta') || str_contains($lowerText, 'card') || str_contains($lowerText, 'credito') || str_contains($lowerText, 'debito')) {
                 // Card payment - generate Stripe link
                 $stripeService = app(StripeService::class);
-                $checkoutUrl = $stripeService->createCheckoutSession($contact, $boletos);
+                $checkoutUrl = $stripeService->createCheckoutSessionCustom($contact, $totalAmount, $boletos > 0 ? "{$boletos} boleto(s) de rifa" : "Donativo");
 
                 if ($checkoutUrl) {
-                    $ticketText = $boletos === 1 ? '1 boleto' : "{$boletos} boletos";
-                    $reply = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por {$ticketText} (\$" . number_format($boletos * 3000, 0) . " MXN):\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente tus boletos!";
+                    $reply = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por \$" . number_format($totalAmount, 0) . " MXN:\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente!";
                 } else {
                     $reply = "Hubo un problema generando tu link de pago. Puedes pagar por transferencia bancaria. Te env\xC3\xADo los datos:";
                     $this->whatsApp->sendBankDetails($from);
@@ -148,22 +149,34 @@ class ConversationService
             $history,
         );
 
-        // 6b. Force advance if AI stuck and user gave a number of boletos
+        // 6b. Force advance if AI stuck and user gave a number
         $stuckSteps = ['interesado', 'presentando_rifa', 'inicio'];
         $nextStep = $aiResponse['next_step'] ?? '';
         if (in_array($state->current_step, $stuckSteps) && in_array($nextStep, $stuckSteps)) {
             $num = $this->extractNumberFromText($text);
+            $customAmount = (int) ($aiResponse['extracted_data']['monto_personalizado'] ?? 0);
+
             // Also check if boletos was extracted by AI but step didn't advance
             if ($num === 0 && !empty($aiResponse['extracted_data']['boletos_solicitados'])) {
                 $num = (int) $aiResponse['extracted_data']['boletos_solicitados'];
             }
-            if ($num > 0) {
+
+            if ($num > 0 && $num <= 50) {
+                // Looks like boletos (1-50)
                 $aiResponse['extracted_data']['boletos_solicitados'] = $num;
                 $aiResponse['next_step'] = 'eligiendo_pago';
                 $total = number_format($num * 3000, 0);
                 $ticketWord = $num === 1 ? '1 boleto' : "{$num} boletos";
                 $aiResponse['response_text'] = "\xC2\xA1Perfecto! {$ticketWord} = \${$total} MXN \xF0\x9F\x92\xAA\n\n\xC2\xBFC\xC3\xB3mo prefieres pagar?\n\xF0\x9F\x92\xB3 Tarjeta o \xF0\x9F\x8F\xA6 Transferencia bancaria?";
-                Log::info('Forced advance to eligiendo_pago', ['boletos' => $num, 'from_step' => $state->current_step]);
+                Log::info('Forced advance to eligiendo_pago (boletos)', ['boletos' => $num]);
+            } elseif ($num > 50 || $customAmount > 0) {
+                // Looks like a custom amount (>50 is likely pesos not boletos)
+                $amount = $customAmount > 0 ? $customAmount : $num;
+                $aiResponse['extracted_data']['monto_personalizado'] = $amount;
+                $aiResponse['extracted_data']['boletos_solicitados'] = 0;
+                $aiResponse['next_step'] = 'eligiendo_pago';
+                $aiResponse['response_text'] = "\xC2\xA1Muchas gracias por tu generosidad! \xF0\x9F\x99\x8F Donativo de \$" . number_format($amount, 0) . " MXN.\n\n\xC2\xBFC\xC3\xB3mo prefieres pagar?\n\xF0\x9F\x92\xB3 Tarjeta o \xF0\x9F\x8F\xA6 Transferencia bancaria?";
+                Log::info('Forced advance to eligiendo_pago (custom amount)', ['amount' => $amount]);
             }
         }
 
@@ -349,15 +362,19 @@ class ConversationService
         if (str_contains($payload, 'interesa') || str_contains($payload, 'si') || $payload === 'me interesa') {
             $contact->update(['status' => 'interesado']);
 
-            // Send raffle image and start conversation
+            // Send raffle image
             $this->sendRaffleImage($from);
 
             $state = $this->getOrCreateState($contact);
             $state->update(['current_step' => 'presentando_rifa']);
 
-            $reply = "\xC2\xA1Qu\xC3\xA9 alegr\xC3\xADa! \xF0\x9F\x92\x8D La rifa es para ayudar a una novia de nuestra comunidad.\n\n"
-                . "Cada boleto cuesta \$3,000 MXN y el premio es de \$100,000 MXN. El sorteo es el 30 de enero de 2027.\n\n"
-                . "Es 100% deducible de Maaser. \xC2\xBFCu\xC3\xA1ntos boletos te gustar\xC3\xADa?";
+            $reply = "Hola, \xC2\xBFc\xC3\xB3mo est\xC3\xA1s?\n\xC2\xA1Espero que muy bien!! \xF0\x9F\x98\x8A\n\n"
+                . "Estoy buscando dinero para mi boda, y me preguntaba si te gustar\xC3\xADa apoyarnos?\n\n"
+                . "Tengo dos opciones:\n\n"
+                . "\xF0\x9F\x8E\x9F *Una rifa* de $100 mil pesos que el boleto cuesta 3 mil.\n\n"
+                . "O si gustar\xC3\xADa aportar con m\xC3\xA1s o menos, *todo es bien recibido*.\n\n"
+                . "Es 100% deducible de Maaser. \xF0\x9F\x99\x8F\n\n"
+                . "Gracias.";
             $result = $this->whatsApp->sendMessage($from, $reply);
 
             Message::create([
