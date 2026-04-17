@@ -21,7 +21,15 @@
 <div class="space-y-4">
     @forelse($donations as $donation)
     <div class="bg-dark-card border border-gray-800 rounded-xl p-5">
-        <div class="flex items-start justify-between">
+        <div class="flex items-start gap-4">
+            @if($donation->receipt_media_id)
+            <a href="/admin/donations/{{ $donation->id }}/receipt" target="_blank" class="shrink-0 block">
+                <img src="/admin/donations/{{ $donation->id }}/receipt" alt="Comprobante" loading="lazy"
+                     class="w-24 h-24 object-cover rounded-lg border border-gray-700 hover:border-gold transition"
+                     onerror="this.style.display='none'">
+            </a>
+            @endif
+            <div class="flex-1 flex items-start justify-between">
             <div>
                 <a href="/admin/contacts/{{ $donation->contact_id }}/chat" class="text-gold font-semibold hover:underline">
                     {{ $donation->contact->nombre_display ?? 'Desconocido' }}
@@ -37,6 +45,7 @@
                 @else
                     <span class="inline-flex px-2 py-0.5 rounded text-xs bg-red-900/30 text-red-300 border border-red-700/50">Rechazado</span>
                 @endif
+            </div>
             </div>
         </div>
 

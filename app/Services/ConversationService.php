@@ -237,6 +237,12 @@ class ConversationService
             return;
         }
 
+        // Persist the receipt locally so the admin can view it later (Meta media IDs expire).
+        \Illuminate\Support\Facades\Storage::disk('local')->put(
+            "donation-receipts/{$mediaId}.jpg",
+            $imageData,
+        );
+
         // Analyze receipt with Claude Vision
         $analysis = $this->anthropic->analyzeTransferReceipt($imageData);
 

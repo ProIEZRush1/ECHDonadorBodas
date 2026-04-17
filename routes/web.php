@@ -24,6 +24,7 @@ Route::middleware('auth')->prefix('admin')->group(function () {
 
     // Donations/Receipts
     Route::get('/donations', [AdminController::class, 'donations']);
+    Route::get('/donations/{id}/receipt', [AdminController::class, 'donationReceipt']);
     Route::post('/donations/{id}/verify', [AdminController::class, 'verifyDonation']);
     Route::post('/donations/{id}/reject', [AdminController::class, 'rejectDonation']);
 

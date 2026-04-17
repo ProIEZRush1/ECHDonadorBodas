@@ -157,6 +157,33 @@ class AdminController extends Controller
     /**
      * Verify a donation manually.
      */
+    /**
+     * Stream the stored receipt image for a donation. Falls back to re-downloading
+     * from Meta if the local copy is missing (e.g. older donations).
+     */
+    public function donationReceipt(int $id)
+    {
+        $donation = Donation::findOrFail($id);
+        $mediaId = $donation->receipt_media_id;
+        if (!$mediaId) {
+            abort(404);
+        }
+
+        $path = "donation-receipts/{$mediaId}.jpg";
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+
+        if (!$disk->exists($path)) {
+            $whatsApp = app(\App\Services\WhatsAppService::class);
+            $bytes = $whatsApp->downloadMedia($mediaId);
+            if (!$bytes) {
+                abort(404);
+            }
+            $disk->put($path, $bytes);
+        }
+
+        return response()->file($disk->path($path), ['Content-Type' => 'image/jpeg']);
+    }
+
     public function verifyDonation(Request $request, int $id): RedirectResponse
     {
         $request->validate(['boletos' => 'required|integer|min:1']);
