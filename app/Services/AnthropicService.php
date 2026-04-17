@@ -263,9 +263,27 @@ PROMPT;
         $content = preg_replace('/\s*```$/', '', $content);
         $content = trim($content);
 
+        // Try to extract JSON from the response (AI sometimes wraps it in text)
+        if (preg_match('/\{[\s\S]*"response_text"[\s\S]*\}/m', $content, $jsonMatch)) {
+            $content = $jsonMatch[0];
+        }
+
         $parsed = json_decode($content, true);
 
         if (!is_array($parsed) || empty($parsed['response_text'])) {
+            // AI returned plain text instead of JSON - use it directly
+            // This is better than a generic fallback
+            if (strlen($content) > 10 && strlen($content) < 2000) {
+                Log::info('AI returned plain text, using directly', ['content_length' => strlen($content)]);
+                return [
+                    'response_text' => $content,
+                    'next_step' => $currentStep,
+                    'extracted_data' => [],
+                    'intent' => 'unclear',
+                    'send_raffle_image' => false,
+                    'send_bank_details' => false,
+                ];
+            }
             Log::warning('Failed to parse AI response', ['content' => $content]);
             return $this->getFallbackResponse($currentStep, '');
         }
