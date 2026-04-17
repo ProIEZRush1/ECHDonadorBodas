@@ -148,6 +148,37 @@ class ConversationService
         $this->updateCollectedData($contact, $state, $aiResponse);
         $this->updateContactStatus($contact, $aiResponse);
 
+        // 9b. Auto-generate Stripe link if AI moved to esperando_pago_tarjeta or mentioned tarjeta
+        $nextStep = $aiResponse['next_step'] ?? $state->current_step;
+        $responseText = mb_strtolower($aiResponse['response_text']);
+        if ($nextStep === 'esperando_pago_tarjeta'
+            || (str_contains($responseText, 'link de pago') && str_contains($responseText, 'tarjeta'))
+            || str_contains($responseText, 'te voy a mandar el link')
+            || str_contains($responseText, 'te envío el link')
+            || str_contains($responseText, 'te envio el link')
+        ) {
+            $collected = $state->fresh()->collected_data ?? [];
+            $boletos = (int) ($collected['boletos_solicitados'] ?? 0);
+            $montoCustom = (int) ($collected['monto_personalizado'] ?? 0);
+            $totalAmount = $boletos > 0 ? $boletos * 3000 : ($montoCustom > 0 ? $montoCustom : 3000);
+
+            try {
+                $stripeService = app(StripeService::class);
+                $label = $boletos > 0 ? "{$boletos} boleto(s) de rifa" : "Donativo";
+                $checkoutUrl = $stripeService->createCheckoutSessionCustom($contact, $totalAmount, $label);
+
+                if ($checkoutUrl) {
+                    $linkMsg = "\xF0\x9F\x92\xB3 Link de pago por \$" . number_format($totalAmount, 0) . " MXN:\n\n{$checkoutUrl}";
+                    $linkResult = $this->whatsApp->sendMessage($from, $linkMsg);
+                    Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $linkMsg, 'wa_message_id' => $linkResult['messages'][0]['id'] ?? null, 'status' => $linkResult ? 'sent' : 'failed']);
+                    $state->update(['current_step' => 'esperando_pago_tarjeta']);
+                    Log::info('Auto-generated Stripe link', ['amount' => $totalAmount, 'contact_id' => $contact->id]);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Auto Stripe link failed', ['error' => $e->getMessage()]);
+            }
+        }
+
         // 10. Send AI reply
         $result = $this->whatsApp->sendMessage($from, $aiResponse['response_text']);
 
