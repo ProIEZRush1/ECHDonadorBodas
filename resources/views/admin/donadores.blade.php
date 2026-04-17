@@ -33,7 +33,8 @@
                 <td class="py-3 px-4 font-medium text-green-300">{{ $donador->nombre_display }}</td>
                 <td class="py-3 px-4 text-gray-400">{{ $donador->telefono }}</td>
                 <td class="py-3 px-4 text-gold font-bold">{{ $donador->boletos }}</td>
-                <td class="py-3 px-4 text-green-400">${{ number_format($donador->boletos * 3000, 0) }}</td>
+                @php $monto = max((int) ($donador->monto_total ?? 0), $donador->boletos * 3000); @endphp
+                <td class="py-3 px-4 text-green-400">${{ number_format($monto, 0) }}</td>
                 <td class="py-3 px-4 text-gray-500">{{ $donador->ultimo_contacto?->diffForHumans() ?? '-' }}</td>
                 <td class="py-3 px-4">
                     <a href="/admin/contacts/{{ $donador->id }}/chat" class="text-gold hover:underline text-xs">Chat</a>

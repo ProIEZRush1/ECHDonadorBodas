@@ -100,7 +100,8 @@ class AdminController extends Controller
      */
     public function donadores(Request $request): View
     {
-        $query = Contact::where('status', 'donador');
+        $query = Contact::where('status', 'donador')
+            ->withSum(['donations as monto_total' => fn($q) => $q->where('status', 'verified')], 'amount');
 
         if ($search = $request->query('search')) {
             $query->where(function ($q) use ($search): void {
@@ -112,7 +113,10 @@ class AdminController extends Controller
 
         $donadores = $query->orderByDesc('boletos')->paginate(50);
         $totalBoletos = Contact::where('status', 'donador')->sum('boletos');
-        $totalRecaudado = $totalBoletos * 3000;
+        $totalRecaudado = (int) Donation::where('status', 'verified')->sum('amount');
+        if ($totalRecaudado < $totalBoletos * 3000) {
+            $totalRecaudado = $totalBoletos * 3000;
+        }
 
         return view('admin.donadores', compact('donadores', 'totalBoletos', 'totalRecaudado'));
     }
@@ -471,14 +475,16 @@ class AdminController extends Controller
             fputcsv($handle, ['Nombre', 'Telefono', 'Boletos', 'Monto Total', 'Ultimo Contacto']);
 
             Contact::where('status', 'donador')
+                ->withSum(['donations as monto_total' => fn($q) => $q->where('status', 'verified')], 'amount')
                 ->orderByDesc('boletos')
                 ->chunk(100, function ($contacts) use ($handle): void {
                     foreach ($contacts as $contact) {
+                        $monto = max((int) ($contact->monto_total ?? 0), $contact->boletos * 3000);
                         fputcsv($handle, [
                             $contact->nombre_display,
                             $contact->telefono,
                             $contact->boletos,
-                            '$' . number_format($contact->boletos * 3000, 0),
+                            '$' . number_format($monto, 0),
                             $contact->ultimo_contacto?->format('Y-m-d H:i'),
                         ]);
                     }
