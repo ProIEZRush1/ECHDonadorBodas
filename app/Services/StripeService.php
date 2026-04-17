@@ -64,8 +64,8 @@ class StripeService
             Log::info('Stripe checkout created', [
                 'session_id' => $session->id,
                 'contact_id' => $contact->id,
-                'boletos' => $boletos,
-                'amount' => $amount,
+                'amount_mxn' => $amountMxn,
+                'label' => $label,
             ]);
 
             return $session->url;
