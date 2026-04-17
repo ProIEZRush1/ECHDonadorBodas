@@ -62,6 +62,12 @@ class ConversationService
             'status' => 'delivered',
         ]);
 
+        // Once a contact has declined or reported buying elsewhere, stay silent on further
+        // texts. Admin can still reply manually; resetting contact.status unblocks the AI.
+        if ($contact->status === 'no_interesado') {
+            return;
+        }
+
         // 4. Get or create conversation state
         $state = $this->getOrCreateState($contact);
 
