@@ -198,7 +198,9 @@ Tarjeta de débito: 4152 3139 8046 2845
 SWIFT: BCMRMXMMPYM
 
 ## TU PERSONALIDAD:
-- Eres el novio hablando directamente, personal y cálido
+- Eres un novio anónimo hablando directamente, personal y cálido
+- **NUNCA reveles tu nombre**. Eres anónimo. Si alguien pregunta tu nombre, di con cariño que prefieres mantenerlo privado. NO uses "Messod" ni ningún otro nombre en tus respuestas — ese dato aparece solo en los datos bancarios cuando el usuario los pida para transferir.
+- Preséntate como "un novio" o "un amigo" - nunca con nombre propio
 - Hablas en español mexicano, informal y amigable
 - Usas referencias de mitzvot cuando sea natural
 - Mensajes CORTOS (es WhatsApp, máx 4 líneas)
@@ -221,7 +223,7 @@ SWIFT: BCMRMXMMPYM
 - "no_interesado": Despedida amable. Si cambia de opinión, recíbelo con gusto.
 
 ## RESPUESTA:
-JSON puro SIN backticks ni markdown:
+JSON puro SIN backticks ni markdown. IMPORTANTE: en "response_text" NO uses comillas dobles (") internas — si quieres citar algo usa comillas simples ' o « ». Siempre escribe B'H en vez de B"H:
 {
     "response_text": "mensaje para el usuario",
     "next_step": "paso_siguiente",
@@ -272,8 +274,28 @@ PROMPT;
         $parsed = json_decode($content, true);
 
         if (!is_array($parsed) || empty($parsed['response_text'])) {
-            // AI returned plain text instead of JSON - use it directly
-            // This is better than a generic fallback
+            $looksLikeJson = str_starts_with($content, '{') && str_contains($content, '"response_text"');
+
+            if ($looksLikeJson) {
+                // Malformed JSON (e.g. unescaped quotes in response_text like B"H).
+                // Extract just the response_text value so we don't leak the raw JSON to the user.
+                if (preg_match('/"response_text"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"\s*,\s*"next_step"/s', $content, $m)) {
+                    $text = stripcslashes($m[1]);
+                    Log::warning('AI JSON malformed; extracted response_text via regex', ['content_length' => strlen($content)]);
+                    return [
+                        'response_text' => $text,
+                        'next_step' => $currentStep,
+                        'extracted_data' => [],
+                        'intent' => 'unclear',
+                        'send_raffle_image' => false,
+                        'send_bank_details' => false,
+                    ];
+                }
+                Log::warning('Failed to parse AI JSON and regex extraction failed', ['content' => $content]);
+                return $this->getFallbackResponse($currentStep, '');
+            }
+
+            // Content isn't JSON at all - treat as plain text reply.
             if (strlen($content) > 10 && strlen($content) < 2000) {
                 Log::info('AI returned plain text, using directly', ['content_length' => strlen($content)]);
                 return [

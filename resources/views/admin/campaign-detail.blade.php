@@ -13,19 +13,19 @@
     </div>
     <div class="bg-dark-card border border-blue-800/30 rounded-xl p-4">
         <p class="text-blue-400 text-xs">Enviados</p>
-        <p class="text-2xl font-bold text-blue-300">{{ $campaign->sent_count }}</p>
+        <p class="text-2xl font-bold text-blue-300">{{ $stats['sent'] }}</p>
     </div>
     <div class="bg-dark-card border border-green-800/30 rounded-xl p-4">
         <p class="text-green-400 text-xs">Entregados</p>
-        <p class="text-2xl font-bold text-green-300">{{ $campaign->delivered_count }}</p>
+        <p class="text-2xl font-bold text-green-300">{{ $stats['delivered'] }}</p>
     </div>
     <div class="bg-dark-card border border-cyan-800/30 rounded-xl p-4">
         <p class="text-cyan-400 text-xs">Leidos</p>
-        <p class="text-2xl font-bold text-cyan-300">{{ $campaign->read_count }}</p>
+        <p class="text-2xl font-bold text-cyan-300">{{ $stats['read'] }}</p>
     </div>
     <div class="bg-dark-card border border-red-800/30 rounded-xl p-4">
         <p class="text-red-400 text-xs">Fallidos</p>
-        <p class="text-2xl font-bold text-red-300">{{ $campaign->failed_count }}</p>
+        <p class="text-2xl font-bold text-red-300">{{ $stats['failed'] }}</p>
     </div>
 </div>
 

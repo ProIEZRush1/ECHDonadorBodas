@@ -42,6 +42,17 @@
         </div>
 
         <div>
+            <label class="block text-sm text-gray-400 mb-1">Pais</label>
+            <select name="pais" class="w-full bg-dark-bg border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-gold focus:outline-none">
+                <option value="">Todos los paises</option>
+                @foreach($countries as $c)
+                    <option value="{{ $c->pais }}">{{ $c->pais }} ({{ number_format($c->total) }})</option>
+                @endforeach
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Filtrar la audiencia por pais</p>
+        </div>
+
+        <div>
             <label class="block text-sm text-gray-400 mb-1">Limite aleatorio (opcional)</label>
             <input type="number" name="random_count" min="1" max="5000" placeholder="Dejar vacio para enviar a todos"
                 class="w-full bg-dark-bg border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 focus:border-gold focus:outline-none">

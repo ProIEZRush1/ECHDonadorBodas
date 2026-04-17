@@ -320,29 +320,37 @@ class ConversationService
         if (str_contains($payload, 'interesa') || str_contains($payload, 'si') || $payload === 'me interesa') {
             $contact->update(['status' => 'interesado']);
 
-            // Send raffle image
             $this->sendRaffleImage($from);
 
             $state = $this->getOrCreateState($contact);
-            $state->update(['current_step' => 'presentando_rifa']);
+            $state->update(['current_step' => 'inicio']);
 
-            $reply = "Hola, \xC2\xBFc\xC3\xB3mo est\xC3\xA1s?\n\xC2\xA1Espero que muy bien!! \xF0\x9F\x98\x8A\n\n"
-                . "Estoy buscando dinero para mi boda, y me preguntaba si te gustar\xC3\xADa apoyarnos?\n\n"
-                . "Tengo dos opciones:\n\n"
-                . "\xF0\x9F\x8E\x9F *Una rifa* de $100 mil pesos que el boleto cuesta 3 mil.\n\n"
-                . "O si gustar\xC3\xADa aportar con m\xC3\xA1s o menos, *todo es bien recibido*.\n\n"
-                . "Es 100% deducible de Maaser. \xF0\x9F\x99\x8F\n\n"
-                . "Gracias.";
-            $result = $this->whatsApp->sendMessage($from, $reply);
+            // Let the AI craft the greeting, sharing the opening in its own words.
+            $history = $this->buildConversationHistory($contact);
+            $aiResponse = $this->anthropic->processConversation(
+                'Me interesa',
+                $state->current_step,
+                $state->collected_data ?? [],
+                $history,
+            );
 
+            $this->updateCollectedData($contact, $state, $aiResponse);
+            $this->updateContactStatus($contact, $aiResponse);
+
+            $result = $this->whatsApp->sendMessage($from, $aiResponse['response_text']);
             Message::create([
                 'contact_id' => $contact->id,
                 'direction' => 'out',
-                'content' => $reply,
+                'content' => $aiResponse['response_text'],
                 'wa_message_id' => $result['messages'][0]['id'] ?? null,
                 'status' => $result ? 'sent' : 'failed',
             ]);
         } else {
+            // Only send goodbye the first time they decline; ignore repeat "No gracias" taps.
+            if ($contact->status === 'no_interesado') {
+                return;
+            }
+
             $contact->update(['status' => 'no_interesado']);
 
             $reply = "\xC2\xA1Gracias por tu tiempo! Si en el futuro te interesa participar, no dudes en escribirnos. Que Hashem te bendiga. \xF0\x9F\x99\x8F";

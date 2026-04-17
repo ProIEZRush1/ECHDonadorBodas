@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Campaign;
+use App\Models\Message;
 use App\Services\WhatsAppService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -41,8 +42,16 @@ class SendMassCampaign implements ShouldQueue
                 ]);
                 $sentCount++;
 
+                Message::create([
+                    'contact_id' => $contact->id,
+                    'direction' => 'out',
+                    'content' => "[Plantilla: rifa_boda]\nShalom {$contactName}! Te invitamos a participar en nuestra rifa solidaria para ayudar a una novia. Boletos: \$3,000 MXN. Premio: \$100,000 MXN. 100% deducible de Maaser. Sorteo: 30 de enero 2027.",
+                    'wa_message_id' => $waMessageId,
+                    'status' => 'sent',
+                ]);
+
                 if ($contact->status === 'nuevo') {
-                    $contact->update(['status' => 'contactado', 'ultimo_contacto' => now()]);
+                    $contact->update(['ultimo_contacto' => now()]);
                 }
             } else {
                 $this->campaign->contacts()->updateExistingPivot($contact->id, [

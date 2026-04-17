@@ -59,12 +59,14 @@ class AdminController extends Controller
         $anthropicCost = round($aiCalls * 0.0135, 2);
 
         $campaignIds = Campaign::pluck('id');
-        $campaignMessagesSent = DB::table('campaign_contact')
+        $campaignMessagesDelivered = DB::table('campaign_contact')
             ->whereIn('campaign_id', $campaignIds)
-            ->whereIn('status', ['sent', 'delivered', 'read'])
+            ->whereIn('status', ['delivered', 'read'])
             ->count();
-        $outgoingMessages = Message::where('direction', 'out')->count();
-        $whatsappCost = round(($campaignMessagesSent * 0.0465) + ($outgoingMessages * 0.0088), 2);
+        $outgoingMessagesDelivered = Message::where('direction', 'out')
+            ->whereIn('status', ['delivered', 'read'])
+            ->count();
+        $whatsappCost = round(($campaignMessagesDelivered * 0.0394) + ($outgoingMessagesDelivered * 0.0088), 2);
 
         $totalCostsUsd = $anthropicCost + $whatsappCost;
         $totalCostsMxn = $totalCostsUsd * 20;
@@ -321,6 +323,12 @@ class AdminController extends Controller
      */
     public function campaignCreate(): View
     {
+        $countries = Contact::select('pais', DB::raw('COUNT(*) as total'))
+            ->whereNotNull('pais')
+            ->groupBy('pais')
+            ->orderByDesc('total')
+            ->get();
+
         $contactCounts = [
             'nuevos' => Contact::where('status', 'nuevo')->count(),
             'todos' => Contact::count(),
@@ -333,7 +341,7 @@ class AdminController extends Controller
             ->pluck('contact_id'))
             ->count();
 
-        return view('admin.campaign-create', compact('contactCounts', 'neverSentCount'));
+        return view('admin.campaign-create', compact('contactCounts', 'neverSentCount', 'countries'));
     }
 
     /**
@@ -344,10 +352,12 @@ class AdminController extends Controller
         $request->validate([
             'nombre' => 'required|string|max:255',
             'audiencia' => 'required|in:nuevos,todos,nunca_enviados',
+            'pais' => 'nullable|string|max:10',
             'random_count' => 'nullable|integer|min:1|max:5000',
         ]);
 
         $audience = $request->input('audiencia');
+        $pais = $request->input('pais');
         $campaignIds = Campaign::pluck('id');
         $randomCount = $request->input('random_count');
 
@@ -359,6 +369,10 @@ class AdminController extends Controller
                 ->pluck('contact_id')),
             'todos' => Contact::query(),
         };
+
+        if ($pais) {
+            $query->where('pais', $pais);
+        }
 
         if ($randomCount) {
             $contactIds = $query->inRandomOrder()->limit($randomCount)->pluck('id');
@@ -394,7 +408,21 @@ class AdminController extends Controller
     {
         $campaign = Campaign::findOrFail($id);
         $contacts = $campaign->contacts()->paginate(50);
-        return view('admin.campaign-detail', compact('campaign', 'contacts'));
+
+        $statusCounts = DB::table('campaign_contact')
+            ->where('campaign_id', $id)
+            ->select('status', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('status')
+            ->pluck('cnt', 'status');
+
+        $stats = [
+            'sent' => ($statusCounts['sent'] ?? 0) + ($statusCounts['delivered'] ?? 0) + ($statusCounts['read'] ?? 0),
+            'delivered' => ($statusCounts['delivered'] ?? 0) + ($statusCounts['read'] ?? 0),
+            'read' => $statusCounts['read'] ?? 0,
+            'failed' => $statusCounts['failed'] ?? 0,
+        ];
+
+        return view('admin.campaign-detail', compact('campaign', 'contacts', 'stats'));
     }
 
     /**

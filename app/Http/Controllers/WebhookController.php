@@ -119,27 +119,10 @@ class WebhookController extends Controller
                 }
             }
 
-            // Update campaign_contact pivot
+            // Update campaign_contact pivot (source of truth; counts are computed from here)
             \DB::table('campaign_contact')
                 ->where('wa_message_id', $waMessageId)
                 ->update(['status' => $mappedStatus]);
-
-            // Update campaign counters
-            $campaignContact = \DB::table('campaign_contact')
-                ->where('wa_message_id', $waMessageId)
-                ->first();
-
-            if ($campaignContact) {
-                $column = match ($mappedStatus) {
-                    'delivered' => 'delivered_count',
-                    'read' => 'read_count',
-                    'failed' => 'failed_count',
-                    default => null,
-                };
-                if ($column) {
-                    Campaign::where('id', $campaignContact->campaign_id)->increment($column);
-                }
-            }
         }
     }
 
