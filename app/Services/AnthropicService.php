@@ -211,7 +211,7 @@ SWIFT: BCMRMXMMPYM
 
 ## PASOS DEL FLUJO:
 - "inicio": El usuario respondió al template de la rifa. Saluda con calidez, explica brevemente la rifa. Hazlo atractivo: \$3,000 por boleto, puedes ganar \$100,000, y todo es Maaser deducible. Pregunta si le interesa participar. Pon send_raffle_image=true la primera vez.
-- "presentando_rifa": Da más detalles si los piden. Responde preguntas sobre la rifa, la novia, el sorteo, cómo funciona, etc. Si muestra interés, pregunta cuántos boletos quiere.
+- "presentando_rifa": El usuario está conociendo las opciones. Si dice "otra cantidad", "quiero dar menos", "otro monto", pregúntale cuánto le gustaría aportar. Si dice un número de boletos, avanza. Si pregunta detalles sobre la rifa, responde.
 - "interesado": El usuario quiere participar. Puede querer boletos de rifa (\$3,000 c/u) O donar cualquier monto libre. Si dice un número de boletos (1, 2, 3, "un boleto"), pon boletos_solicitados=ese número y monto_personalizado=null. Si dice un monto libre ("quiero dar 500", "aporto 1000", "200 pesos"), pon monto_personalizado=ese monto y boletos_solicitados=0. Confirma el monto y pregunta: "¿Cómo prefieres pagar? 💳 Tarjeta o 🏦 Transferencia bancaria?" → next_step="eligiendo_pago". AVANZA SIEMPRE, nunca repitas la pregunta.
 - "eligiendo_pago": El usuario elige forma de pago. Si dice "tarjeta", "card", "con tarjeta" → pon extracted_data.forma_pago="tarjeta" y next_step="esperando_pago_tarjeta". Si dice "transferencia", "transfer", "banco" → pon extracted_data.forma_pago="transferencia", send_bank_details=true, y next_step="esperando_comprobante".
 - "esperando_pago_tarjeta": Le enviamos link de pago. Si pregunta algo, responde. Si quiere dar más o cambiar, acéptalo (vuelve a eligiendo_pago con el nuevo monto).
@@ -296,14 +296,14 @@ PROMPT;
                 'intent' => 'interested',
             ],
             'presentando_rifa' => [
-                'response_text' => "La rifa es el 30 de enero de 2027. Cada boleto cuesta \$3,000 MXN y el premio es de \$100,000 MXN. Es una hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xC2\xBFCu\xC3\xA1ntos boletos te gustar\xC3\xADa?",
+                'response_text' => "\xC2\xA1Claro! Puedes comprar boletos de rifa (\$3,000 c/u) o aportar el monto que gustes. \xC2\xBFCu\xC3\xA1nto te gustar\xC3\xADa aportar? \xF0\x9F\x99\x8F",
                 'next_step' => 'interesado',
                 'send_raffle_image' => false,
                 'send_bank_details' => false,
                 'intent' => 'asking_details',
             ],
             'interesado' => [
-                'response_text' => "\xC2\xA1Excelente! \xC2\xBFCu\xC3\xA1ntos boletos te gustar\xC3\xADa comprar? Cada uno cuesta \$3,000 MXN.",
+                'response_text' => "\xC2\xA1Gracias! \xC2\xBFCu\xC3\xA1nto te gustar\xC3\xADa aportar? Puedes comprar boletos (\$3,000 c/u) o donar cualquier monto.",
                 'next_step' => 'interesado',
                 'send_raffle_image' => false,
                 'send_bank_details' => false,
