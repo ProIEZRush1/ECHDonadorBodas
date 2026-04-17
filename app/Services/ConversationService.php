@@ -257,10 +257,12 @@ class ConversationService
             'status' => 'pending',
         ]);
 
-        if ($analysis['is_receipt'] && in_array($analysis['confidence'], ['high', 'medium'])) {
-            // Valid receipt - calculate tickets and confirm
-            $amount = $analysis['amount'] ?? 3000;
-            $boletos = max(1, (int) floor($amount / 3000));
+        $recipientOk = (bool) ($analysis['recipient_matches'] ?? false);
+        $amount = (int) ($analysis['amount'] ?? 0);
+
+        if ($analysis['is_receipt'] && $recipientOk && $analysis['confidence'] === 'high' && $amount >= 3000) {
+            // Valid ticket-buying receipt - calculate tickets and confirm
+            $boletos = (int) floor($amount / 3000);
             $donation->update([
                 'boletos' => $boletos,
                 'status' => 'verified',
@@ -281,6 +283,20 @@ class ConversationService
                 . "Tienes {$ticketText} para la rifa del 30 de enero de 2027.\n\n"
                 . "Que Hashem te bendiga por esta hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xF0\x9F\x92\x8D\xF0\x9F\x95\x8E\n\n"
                 . "\xC2\xA1Mucha suerte en el sorteo!";
+        } elseif ($analysis['is_receipt'] && $recipientOk && $amount > 0 && $amount < 3000) {
+            // Small custom donation (not a boleto purchase) - confirm as donation, 0 boletos, admin reviews.
+            $donation->update([
+                'boletos' => 0,
+                'status' => 'pending',
+            ]);
+            $contact->update(['status' => 'donador']);
+            if ($state) {
+                $state->update(['current_step' => 'confirmado']);
+            }
+
+            $amountText = '$' . number_format($amount, 0);
+            $reply = "\xC2\xA1Recibimos tu aporte de {$amountText}! \xF0\x9F\x99\x8F Muchas gracias por tu generosidad."
+                . " Nuestro equipo lo revisar\xC3\xA1 y te confirmaremos en breve. Que Hashem te bendiga. \xE2\x9D\xA4\xEF\xB8\x8F";
         } else {
             // Could not verify - mark for manual review
             $reply = "Recibimos tu imagen. \xF0\x9F\x93\xB8 Nuestro equipo la revisar\xC3\xA1 y te confirmaremos tus boletos en breve. \xC2\xA1Gracias por tu paciencia!";
