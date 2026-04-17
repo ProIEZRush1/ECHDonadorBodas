@@ -70,22 +70,9 @@ class ConversationService
             $state->update(['current_step' => 'confirmado']);
         }
 
-        // 4b. If waiting for comprobante, remind them to send image
-        if ($state->current_step === 'esperando_comprobante') {
-            $reply = "Estamos esperando tu comprobante de transferencia. Por favor env\xC3\xADanos una foto o captura de pantalla del comprobante bancario. \xF0\x9F\x93\xB8";
-            $result = $this->whatsApp->sendMessage($from, $reply);
-            Message::create([
-                'contact_id' => $contact->id,
-                'direction' => 'out',
-                'content' => $reply,
-                'wa_message_id' => $result['messages'][0]['id'] ?? null,
-                'status' => $result ? 'sent' : 'failed',
-            ]);
-            return;
-        }
-
-        // 4c. Handle payment method choice directly (bypass AI to avoid JSON parse failures)
-        if ($state->current_step === 'eligiendo_pago') {
+        // 4b. Handle payment method choice directly (bypass AI for reliability)
+        //     Also intercept "tarjeta"/"transferencia" from ANY step (user might say it anytime)
+        if ($state->current_step === 'eligiendo_pago' || $this->isPaymentChoice($text)) {
             $lowerText = mb_strtolower(trim($text));
             $boletos = (int) ($state->collected_data['boletos_solicitados'] ?? 0);
             $montoCustom = (int) ($state->collected_data['monto_personalizado'] ?? 0);
@@ -124,19 +111,8 @@ class ConversationService
             // If unclear, fall through to AI
         }
 
-        // 4d. If waiting for card payment, remind them
-        if ($state->current_step === 'esperando_pago_tarjeta') {
-            $reply = "Estamos esperando que completes tu pago con tarjeta. Usa el link que te enviamos. \xF0\x9F\x92\xB3 Si tienes alg\xC3\xBAn problema, escr\xC3\xADbenos.";
-            $result = $this->whatsApp->sendMessage($from, $reply);
-            Message::create([
-                'contact_id' => $contact->id,
-                'direction' => 'out',
-                'content' => $reply,
-                'wa_message_id' => $result['messages'][0]['id'] ?? null,
-                'status' => $result ? 'sent' : 'failed',
-            ]);
-            return;
-        }
+        // 4c. All other steps - let AI handle naturally (no more rigid interceptors)
+        // The AI knows the context and can handle "quiero dar mas", questions, etc.
 
         // 5. Build conversation history
         $history = $this->buildConversationHistory($contact);
@@ -565,6 +541,17 @@ class ConversationService
             && in_array($contact->status, ['nuevo', 'contactado', 'leido'])) {
             $contact->update(['status' => 'interesado']);
         }
+    }
+
+    /**
+     * Check if the user text is clearly a payment method choice.
+     */
+    private function isPaymentChoice(string $text): bool
+    {
+        $lower = mb_strtolower(trim($text));
+        return str_contains($lower, 'tarjeta') || str_contains($lower, 'transferencia')
+            || str_contains($lower, 'bancaria') || $lower === 'card'
+            || str_contains($lower, 'con tarjeta') || str_contains($lower, 'por transferencia');
     }
 
     /**
