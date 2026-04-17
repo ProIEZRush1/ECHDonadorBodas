@@ -44,7 +44,14 @@ class AdminController extends Controller
         ];
 
         $totalBoletos = Contact::sum('boletos');
-        $totalRecaudado = $totalBoletos * 3000;
+        // Recaudado includes both boleto purchases and custom-amount verified donations.
+        // Sum of verified donation amounts captures sub-boleto contributions that the
+        // boleto count alone would miss.
+        $totalRecaudado = (int) Donation::where('status', 'verified')->sum('amount');
+        if ($totalRecaudado < $totalBoletos * 3000) {
+            // Fallback if donation amount rows are missing for legacy boleto-based records.
+            $totalRecaudado = $totalBoletos * 3000;
+        }
 
         // Countdown to raffle
         $sorteoDate = \Carbon\Carbon::parse('2027-01-30');
