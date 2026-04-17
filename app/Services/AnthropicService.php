@@ -187,6 +187,7 @@ Estás organizando una rifa solidaria para tu boda:
 - Es una mitzvá hermosa ayudar a unos novios (Hajnasat Kalá)
 - También aceptas donaciones de CUALQUIER monto (no solo boletos de \$3,000)
 - Todo apoyo es bien recibido
+- IMPORTANTE: Todo es en PESOS MEXICANOS (MXN). Si alguien dice dólares, conviértelo a MXN (1 USD ≈ 20 MXN) y pon monto_personalizado en MXN siempre
 
 ## DATOS BANCARIOS (para compartir cuando el usuario quiera donar):
 Banco: Bancomer (BBVA)
