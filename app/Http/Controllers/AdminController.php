@@ -8,12 +8,15 @@ use App\Models\Contact;
 use App\Models\ConversationState;
 use App\Models\Donation;
 use App\Models\Message;
+use App\Models\MessageTemplate;
 use App\Services\ConversationService;
+use App\Services\WhatsAppService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -54,7 +57,7 @@ class AdminController extends Controller
         }
 
         // Countdown to raffle
-        $sorteoDate = \Carbon\Carbon::parse('2027-01-30');
+        $sorteoDate = Carbon::parse('2027-01-30');
         $diasRestantes = (int) now()->diffInDays($sorteoDate, false);
 
         $recentContacts = Contact::orderByDesc('ultimo_contacto')->take(20)->get();
@@ -92,7 +95,15 @@ class AdminController extends Controller
             'pending_donations' => $pendingDonations,
         ];
 
-        return view('admin.dashboard', compact('stats', 'recentContacts', 'campaigns', 'financial'));
+        $organization = app('currentOrganization');
+        $platform = [
+            'connected_numbers' => $organization->whatsappConnections()->where('status', 'connected')->count(),
+            'templates' => $organization->templates()->count(),
+            'active_flow' => $organization->flows()->where('is_active', true)->exists(),
+            'billing_active' => $organization->billingProfile?->status === 'active',
+        ];
+
+        return view('admin.dashboard', compact('stats', 'recentContacts', 'campaigns', 'financial', 'platform'));
     }
 
     /**
@@ -101,7 +112,7 @@ class AdminController extends Controller
     public function donadores(Request $request): View
     {
         $query = Contact::where('status', 'donador')
-            ->withSum(['donations as monto_total' => fn($q) => $q->where('status', 'verified')], 'amount');
+            ->withSum(['donations as monto_total' => fn ($q) => $q->where('status', 'verified')], 'amount');
 
         if ($search = $request->query('search')) {
             $query->where(function ($q) use ($search): void {
@@ -129,7 +140,7 @@ class AdminController extends Controller
         $query = Contact::query();
 
         $statuses = array_filter((array) $request->query('status', []));
-        if (!empty($statuses)) {
+        if (! empty($statuses)) {
             $query->whereIn('status', $statuses);
         }
 
@@ -176,17 +187,17 @@ class AdminController extends Controller
     {
         $donation = Donation::findOrFail($id);
         $mediaId = $donation->receipt_media_id;
-        if (!$mediaId) {
+        if (! $mediaId) {
             abort(404);
         }
 
         $path = "donation-receipts/{$mediaId}.jpg";
-        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $disk = Storage::disk('local');
 
-        if (!$disk->exists($path)) {
-            $whatsApp = app(\App\Services\WhatsAppService::class);
+        if (! $disk->exists($path)) {
+            $whatsApp = app(WhatsAppService::class);
             $bytes = $whatsApp->downloadMedia($mediaId);
-            if (!$bytes) {
+            if (! $bytes) {
                 abort(404);
             }
             $disk->put($path, $bytes);
@@ -295,40 +306,43 @@ class AdminController extends Controller
 
         $file = $request->file('file');
         $handle = fopen($file->getRealPath(), 'r');
-        if (!$handle) {
+        if (! $handle) {
             return back()->withErrors(['file' => 'No se pudo abrir el archivo']);
         }
 
         $header = fgetcsv($handle);
-        if (!$header) {
+        if (! $header) {
             fclose($handle);
+
             return back()->withErrors(['file' => 'El archivo esta vacio']);
         }
 
-        $header = array_map(fn(string $h): string => strtolower(trim($h)), $header);
+        $header = array_map(fn (string $h): string => strtolower(trim($h)), $header);
 
         $imported = 0;
         $skipped = 0;
 
         while (($row = fgetcsv($handle)) !== false) {
             $data = array_combine($header, array_pad($row, count($header), ''));
-            if (!$data) {
+            if (! $data) {
                 continue;
             }
 
             $telefono = preg_replace('/[^0-9]/', '', $data['telefono'] ?? '');
             if (strlen($telefono) < 10) {
                 $skipped++;
+
                 continue;
             }
 
             // Add Mexico prefix if needed
             if (strlen($telefono) === 10) {
-                $telefono = '52' . $telefono;
+                $telefono = '52'.$telefono;
             }
 
             if (Contact::where('telefono', $telefono)->exists()) {
                 $skipped++;
+
                 continue;
             }
 
@@ -353,6 +367,7 @@ class AdminController extends Controller
     public function campaigns(): View
     {
         $campaigns = Campaign::orderByDesc('created_at')->paginate(25);
+
         return view('admin.campaigns', compact('campaigns'));
     }
 
@@ -379,7 +394,9 @@ class AdminController extends Controller
             ->pluck('contact_id'))
             ->count();
 
-        return view('admin.campaign-create', compact('contactCounts', 'neverSentCount', 'countries'));
+        $templates = MessageTemplate::where('status', 'approved')->orderBy('name')->get();
+
+        return view('admin.campaign-create', compact('contactCounts', 'neverSentCount', 'countries', 'templates'));
     }
 
     /**
@@ -392,7 +409,10 @@ class AdminController extends Controller
             'audiencia' => 'required|in:nuevos,todos,nunca_enviados',
             'pais' => 'nullable|string|max:10',
             'random_count' => 'nullable|integer|min:1|max:5000',
+            'template_name' => 'required|string|max:100',
         ]);
+
+        abort_unless(MessageTemplate::where('name', $request->input('template_name'))->where('status', 'approved')->exists(), 422, 'Selecciona una plantilla aprobada.');
 
         $audience = $request->input('audiencia');
         $pais = $request->input('pais');
@@ -424,12 +444,12 @@ class AdminController extends Controller
 
         $campaign = Campaign::create([
             'name' => $request->input('nombre'),
-            'template_name' => 'rifa_boda',
+            'template_name' => $request->input('template_name'),
             'status' => 'sending',
             'total_contacts' => $contactIds->count(),
         ]);
 
-        $pivotData = $contactIds->mapWithKeys(fn(int $id): array => [
+        $pivotData = $contactIds->mapWithKeys(fn (int $id): array => [
             $id => ['status' => 'pending'],
         ])->toArray();
         $campaign->contacts()->attach($pivotData);
@@ -468,14 +488,14 @@ class AdminController extends Controller
      */
     public function exportDonadores(): StreamedResponse
     {
-        $fileName = 'donadores_rifa_boda_' . date('Y-m-d') . '.csv';
+        $fileName = 'donadores_rifa_boda_'.date('Y-m-d').'.csv';
 
         return response()->streamDownload(function (): void {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, ['Nombre', 'Telefono', 'Boletos', 'Monto Total', 'Ultimo Contacto']);
 
             Contact::where('status', 'donador')
-                ->withSum(['donations as monto_total' => fn($q) => $q->where('status', 'verified')], 'amount')
+                ->withSum(['donations as monto_total' => fn ($q) => $q->where('status', 'verified')], 'amount')
                 ->orderByDesc('boletos')
                 ->chunk(100, function ($contacts) use ($handle): void {
                     foreach ($contacts as $contact) {
@@ -484,7 +504,7 @@ class AdminController extends Controller
                             $contact->nombre_display,
                             $contact->telefono,
                             $contact->boletos,
-                            '$' . number_format($monto, 0),
+                            '$'.number_format($monto, 0),
                             $contact->ultimo_contacto?->format('Y-m-d H:i'),
                         ]);
                     }

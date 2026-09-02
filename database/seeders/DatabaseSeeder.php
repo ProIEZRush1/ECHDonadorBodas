@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -11,12 +12,16 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $organization = Organization::where('slug', 'buy-overcloud')->firstOrFail();
+
         // Create admin user
         User::firstOrCreate(
-            ['email' => env('ADMIN_EMAIL', 'admin@echdonadorbodas.com')],
+            ['email' => env('ADMIN_EMAIL', 'admin@buyovercloud.com')],
             [
-                'name' => 'Admin',
+                'organization_id' => $organization->id,
+                'name' => 'Buy Overcloud Admin',
                 'password' => Hash::make(env('ADMIN_PASSWORD', 'password')),
+                'role' => 'super_admin',
             ],
         );
 
@@ -34,7 +39,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($settings as $key => $value) {
-            Setting::firstOrCreate(['key' => $key], ['value' => $value]);
+            Setting::firstOrCreate(['organization_id' => $organization->id, 'key' => $key], ['value' => $value]);
         }
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Donation;
 use App\Models\Message;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Conversation orchestrator for the wedding raffle chatbot.
@@ -45,10 +46,10 @@ class ConversationService
         );
 
         $contactUpdates = ['ultimo_contacto' => now(), 'wa_id' => $from];
-        if (!$contact->pais) {
+        if (! $contact->pais) {
             $contactUpdates['pais'] = Contact::detectCountry($from);
         }
-        if ($senderName && !$contact->nombre) {
+        if ($senderName && ! $contact->nombre) {
             $contactUpdates['nombre'] = $senderName;
         }
         $contact->update($contactUpdates);
@@ -81,10 +82,10 @@ class ConversationService
             if (str_contains($lowerText, 'tarjeta') || str_contains($lowerText, 'card') || str_contains($lowerText, 'credito') || str_contains($lowerText, 'debito')) {
                 // Card payment - generate Stripe link
                 $stripeService = app(StripeService::class);
-                $checkoutUrl = $stripeService->createCheckoutSessionCustom($contact, $totalAmount, $boletos > 0 ? "{$boletos} boleto(s) de rifa" : "Donativo");
+                $checkoutUrl = $stripeService->createCheckoutSessionCustom($contact, $totalAmount, $boletos > 0 ? "{$boletos} boleto(s) de rifa" : 'Donativo');
 
                 if ($checkoutUrl) {
-                    $reply = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por \$" . number_format($totalAmount, 0) . " MXN:\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente!";
+                    $reply = "\xF0\x9F\x92\xB3 Aqu\xC3\xAD est\xC3\xA1 tu link de pago por \$".number_format($totalAmount, 0)." MXN:\n\n{$checkoutUrl}\n\n\xC2\xA1Una vez que pagues, te confirmaremos autom\xC3\xA1ticamente!";
                 } else {
                     $reply = "Hubo un problema generando tu link de pago. Puedes pagar por transferencia bancaria. Te env\xC3\xADo los datos:";
                     $this->whatsApp->sendBankDetails($from);
@@ -94,6 +95,7 @@ class ConversationService
                 $contact->update(['status' => 'datos_enviados']);
                 $result = $this->whatsApp->sendMessage($from, $reply);
                 Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $reply, 'wa_message_id' => $result['messages'][0]['id'] ?? null, 'status' => $result ? 'sent' : 'failed']);
+
                 return;
 
             } elseif (str_contains($lowerText, 'transfer') || str_contains($lowerText, 'banco') || str_contains($lowerText, 'bancaria') || str_contains($lowerText, 'clabe')) {
@@ -106,6 +108,7 @@ class ConversationService
                 $contact->update(['status' => 'datos_enviados']);
                 $result = $this->whatsApp->sendMessage($from, $reply);
                 Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $reply, 'wa_message_id' => $result['messages'][0]['id'] ?? null, 'status' => $result ? 'sent' : 'failed']);
+
                 return;
             }
             // If unclear, fall through to AI
@@ -164,11 +167,11 @@ class ConversationService
 
             try {
                 $stripeService = app(StripeService::class);
-                $label = $boletos > 0 ? "{$boletos} boleto(s) de rifa" : "Donativo";
+                $label = $boletos > 0 ? "{$boletos} boleto(s) de rifa" : 'Donativo';
                 $checkoutUrl = $stripeService->createCheckoutSessionCustom($contact, $totalAmount, $label);
 
                 if ($checkoutUrl) {
-                    $linkMsg = "\xF0\x9F\x92\xB3 Link de pago por \$" . number_format($totalAmount, 0) . " MXN:\n\n{$checkoutUrl}";
+                    $linkMsg = "\xF0\x9F\x92\xB3 Link de pago por \$".number_format($totalAmount, 0)." MXN:\n\n{$checkoutUrl}";
                     $linkResult = $this->whatsApp->sendMessage($from, $linkMsg);
                     Message::create(['contact_id' => $contact->id, 'direction' => 'out', 'content' => $linkMsg, 'wa_message_id' => $linkResult['messages'][0]['id'] ?? null, 'status' => $linkResult ? 'sent' : 'failed']);
                     $state->update(['current_step' => 'esperando_pago_tarjeta']);
@@ -204,8 +207,9 @@ class ConversationService
         $this->whatsApp->markAsRead($waMessageId);
 
         $contact = Contact::where('telefono', $from)->first();
-        if (!$contact) {
+        if (! $contact) {
             Log::warning('Image from unknown contact', ['from' => $from]);
+
             return;
         }
 
@@ -224,7 +228,7 @@ class ConversationService
 
         // Download and analyze the image
         $imageData = $this->whatsApp->downloadMedia($mediaId);
-        if (!$imageData) {
+        if (! $imageData) {
             $reply = "No pudimos descargar la imagen. \xC2\xBFPodr\xC3\xADas enviarla de nuevo?";
             $result = $this->whatsApp->sendMessage($from, $reply);
             Message::create([
@@ -234,11 +238,12 @@ class ConversationService
                 'wa_message_id' => $result['messages'][0]['id'] ?? null,
                 'status' => $result ? 'sent' : 'failed',
             ]);
+
             return;
         }
 
         // Persist the receipt locally so the admin can view it later (Meta media IDs expire).
-        \Illuminate\Support\Facades\Storage::disk('local')->put(
+        Storage::disk('local')->put(
             "donation-receipts/{$mediaId}.jpg",
             $imageData,
         );
@@ -280,9 +285,9 @@ class ConversationService
 
             $ticketText = $boletos === 1 ? '1 boleto' : "{$boletos} boletos";
             $reply = "\xC2\xA1Comprobante recibido y verificado! \xE2\x9C\x85\n\n"
-                . "Tienes {$ticketText} para la rifa del 30 de enero de 2027.\n\n"
-                . "Que Hashem te bendiga por esta hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xF0\x9F\x92\x8D\xF0\x9F\x95\x8E\n\n"
-                . "\xC2\xA1Mucha suerte en el sorteo!";
+                ."Tienes {$ticketText} para la rifa del 30 de enero de 2027.\n\n"
+                ."Que Hashem te bendiga por esta hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xF0\x9F\x92\x8D\xF0\x9F\x95\x8E\n\n"
+                ."\xC2\xA1Mucha suerte en el sorteo!";
         } elseif ($analysis['is_receipt'] && $recipientOk && $amount > 0 && $amount < 3000) {
             // Small custom donation (not a boleto purchase) - confirm as donation, 0 boletos, admin reviews.
             $donation->update([
@@ -294,9 +299,9 @@ class ConversationService
                 $state->update(['current_step' => 'confirmado']);
             }
 
-            $amountText = '$' . number_format($amount, 0);
+            $amountText = '$'.number_format($amount, 0);
             $reply = "\xC2\xA1Recibimos tu aporte de {$amountText}! \xF0\x9F\x99\x8F Muchas gracias por tu generosidad."
-                . " Nuestro equipo lo revisar\xC3\xA1 y te confirmaremos en breve. Que Hashem te bendiga. \xE2\x9D\xA4\xEF\xB8\x8F";
+                ." Nuestro equipo lo revisar\xC3\xA1 y te confirmaremos en breve. Que Hashem te bendiga. \xE2\x9D\xA4\xEF\xB8\x8F";
         } else {
             // Could not verify - mark for manual review
             $reply = "Recibimos tu imagen. \xF0\x9F\x93\xB8 Nuestro equipo la revisar\xC3\xA1 y te confirmaremos tus boletos en breve. \xC2\xA1Gracias por tu paciencia!";
@@ -405,6 +410,7 @@ class ConversationService
         ]);
 
         $contact->update(['ultimo_contacto' => now()]);
+
         return $result;
     }
 
@@ -465,6 +471,7 @@ class ConversationService
         if ($contact->boletos > 0) {
             $data['boletos_previos'] = $contact->boletos;
         }
+
         return $data;
     }
 
@@ -481,7 +488,7 @@ class ConversationService
             ->take(10)
             ->get();
 
-        return $messages->map(fn(Message $msg): array => [
+        return $messages->map(fn (Message $msg): array => [
             'role' => $msg->direction === 'in' ? 'user' : 'assistant',
             'content' => $msg->content,
         ])->toArray();
@@ -490,7 +497,7 @@ class ConversationService
     /**
      * Update collected data and conversation state from AI response.
      *
-     * @param array<string, mixed> $aiResponse
+     * @param  array<string, mixed>  $aiResponse
      */
     private function updateCollectedData(Contact $contact, ConversationState $state, array $aiResponse): void
     {
@@ -504,15 +511,15 @@ class ConversationService
         }
 
         $contactUpdates = [];
-        if (!empty($extracted['nombre'])) {
+        if (! empty($extracted['nombre'])) {
             $contactUpdates['nombre'] = $extracted['nombre'];
             $contactUpdates['nombre_completo'] = $extracted['nombre'];
         }
-        if (!empty($extracted['boletos_solicitados'])) {
+        if (! empty($extracted['boletos_solicitados'])) {
             $collected['boletos_solicitados'] = (int) $extracted['boletos_solicitados'];
         }
 
-        if (!empty($contactUpdates)) {
+        if (! empty($contactUpdates)) {
             $contact->update($contactUpdates);
         }
 
@@ -527,7 +534,7 @@ class ConversationService
     /**
      * Update contact status based on AI response.
      *
-     * @param array<string, mixed> $aiResponse
+     * @param  array<string, mixed>  $aiResponse
      */
     private function updateContactStatus(Contact $contact, array $aiResponse): void
     {
@@ -536,16 +543,19 @@ class ConversationService
 
         if ($nextStep === 'no_interesado') {
             $contact->update(['status' => 'no_interesado']);
+
             return;
         }
 
         if ($nextStep === 'confirmado') {
             $contact->update(['status' => 'donador']);
+
             return;
         }
 
         if ($nextStep === 'enviando_datos_bancarios' || $nextStep === 'esperando_comprobante') {
             $contact->update(['status' => 'datos_enviados']);
+
             return;
         }
 
@@ -561,6 +571,7 @@ class ConversationService
     private function isPaymentChoice(string $text): bool
     {
         $lower = mb_strtolower(trim($text));
+
         return str_contains($lower, 'tarjeta') || str_contains($lower, 'transferencia')
             || str_contains($lower, 'bancaria') || $lower === 'card'
             || str_contains($lower, 'con tarjeta') || str_contains($lower, 'por transferencia');
@@ -586,7 +597,7 @@ class ConversationService
         ];
 
         foreach ($words as $word => $num) {
-            if (str_starts_with($text, $word . ' ') || $text === $word) {
+            if (str_starts_with($text, $word.' ') || $text === $word) {
                 return $num;
             }
         }

@@ -25,8 +25,9 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        if (Auth::attempt($request->only('email', 'password'), true)) {
+        if (Auth::attempt([...$request->only('email', 'password'), 'is_active' => true], true)) {
             $request->session()->regenerate();
+
             return redirect()->intended('/admin');
         }
 
@@ -38,6 +39,7 @@ class AuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
         return redirect('/login');
     }
 }

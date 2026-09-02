@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\AiUsageRecord;
+use App\Models\ConversationFlow;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -11,8 +13,11 @@ use Illuminate\Support\Facades\Log;
 class AnthropicService
 {
     private string $apiKey;
+
     private string $model;
+
     private string $apiVersion;
+
     private string $baseUrl;
 
     public function __construct()
@@ -26,8 +31,8 @@ class AnthropicService
     /**
      * Process a conversation turn through the Anthropic API.
      *
-     * @param array<string, mixed> $collectedData
-     * @param array<int, array{role: string, content: string}> $conversationHistory
+     * @param  array<string, mixed>  $collectedData
+     * @param  array<int, array{role: string, content: string}>  $conversationHistory
      * @return array{response_text: string, next_step: string, extracted_data: array<string, mixed>, intent: string, send_raffle_image: bool, send_bank_details: bool}
      */
     public function processConversation(
@@ -63,7 +68,18 @@ class AnthropicService
             ]);
 
             if ($response->successful()) {
+                if (app()->bound('currentOrganization')) {
+                    AiUsageRecord::create([
+                        'organization_id' => app('currentOrganization')->id,
+                        'provider' => 'anthropic',
+                        'model' => $this->model,
+                        'input_tokens' => (int) $response->json('usage.input_tokens', 0),
+                        'output_tokens' => (int) $response->json('usage.output_tokens', 0),
+                        'metadata' => ['feature' => 'conversation'],
+                    ]);
+                }
                 $content = $response->json('content.0.text', '');
+
                 return $this->parseAiResponse($content, $currentStep);
             }
 
@@ -122,21 +138,22 @@ class AnthropicService
                             [
                                 'type' => 'text',
                                 'text' => 'Analyze this image. Is this a bank transfer receipt (comprobante de transferencia) or proof of payment? '
-                                    . 'Expected recipient: Messod / BBVA Bancomer / Account ending in 0551. '
-                                    . 'Expected amount should be a multiple of $3,000 MXN (one raffle ticket = $3,000). '
-                                    . 'Respond in pure JSON WITHOUT backticks: '
-                                    . '{"is_receipt": true/false, "amount": number_or_null, "reference": "string_or_null", "recipient_matches": true/false, "confidence": "high"/"medium"/"low"}',
+                                    .'Expected recipient: Messod / BBVA Bancomer / Account ending in 0551. '
+                                    .'Expected amount should be a multiple of $3,000 MXN (one raffle ticket = $3,000). '
+                                    .'Respond in pure JSON WITHOUT backticks: '
+                                    .'{"is_receipt": true/false, "amount": number_or_null, "reference": "string_or_null", "recipient_matches": true/false, "confidence": "high"/"medium"/"low"}',
                             ],
                         ],
                     ],
                 ],
             ]);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::error('Anthropic Vision API error', [
                     'status' => $response->status(),
                     'body' => substr($response->body(), 0, 500),
                 ]);
+
                 return $defaultResult;
             }
 
@@ -148,8 +165,9 @@ class AnthropicService
 
             $parsed = json_decode($content, true);
 
-            if (!is_array($parsed) || !isset($parsed['is_receipt'])) {
+            if (! is_array($parsed) || ! isset($parsed['is_receipt'])) {
                 Log::warning('Failed to parse receipt analysis', ['content' => $content]);
+
                 return $defaultResult;
             }
 
@@ -162,6 +180,7 @@ class AnthropicService
             ];
         } catch (\Throwable $e) {
             Log::error('Anthropic Vision exception', ['error' => $e->getMessage()]);
+
             return $defaultResult;
         }
     }
@@ -169,11 +188,21 @@ class AnthropicService
     /**
      * Build the system prompt for the raffle chatbot.
      *
-     * @param array<string, mixed> $collectedData
+     * @param  array<string, mixed>  $collectedData
      */
     private function buildSystemPrompt(string $currentStep, array $collectedData): string
     {
         $dataJson = json_encode($collectedData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        if (app()->bound('currentOrganization')) {
+            $flow = ConversationFlow::where('is_active', true)->latest()->first();
+            if ($flow) {
+                $nodes = collect($flow->nodes);
+                $ai = $nodes->firstWhere('type', 'ai');
+
+                return $flow->system_prompt."\n\nOBJETIVO:\n".($ai['objective'] ?? $flow->description)."\n\nESTADO ACTUAL: {$currentStep}\nDATOS RECOPILADOS: {$dataJson}\n\nResponde exclusivamente con JSON válido usando las claves response_text, next_step, extracted_data, intent, send_raffle_image y send_bank_details. Mantén send_raffle_image y send_bank_details en false salvo que las instrucciones lo exijan.";
+            }
+        }
 
         return <<<PROMPT
 Eres un novio que necesita ayuda para su boda. Hablas por WhatsApp de forma personal y cálida, como si fueras amigo de la persona.
@@ -281,7 +310,7 @@ PROMPT;
 
         $parsed = json_decode($content, true);
 
-        if (!is_array($parsed) || empty($parsed['response_text'])) {
+        if (! is_array($parsed) || empty($parsed['response_text'])) {
             $looksLikeJson = str_starts_with($content, '{') && str_contains($content, '"response_text"');
 
             if ($looksLikeJson) {
@@ -290,6 +319,7 @@ PROMPT;
                 if (preg_match('/"response_text"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"\s*,\s*"next_step"/s', $content, $m)) {
                     $text = stripcslashes($m[1]);
                     Log::warning('AI JSON malformed; extracted response_text via regex', ['content_length' => strlen($content)]);
+
                     return [
                         'response_text' => $text,
                         'next_step' => $currentStep,
@@ -300,12 +330,14 @@ PROMPT;
                     ];
                 }
                 Log::warning('Failed to parse AI JSON and regex extraction failed', ['content' => $content]);
+
                 return $this->getFallbackResponse($currentStep, '');
             }
 
             // Content isn't JSON at all - treat as plain text reply.
             if (strlen($content) > 10 && strlen($content) < 2000) {
                 Log::info('AI returned plain text, using directly', ['content_length' => strlen($content)]);
+
                 return [
                     'response_text' => $content,
                     'next_step' => $currentStep,
@@ -316,6 +348,7 @@ PROMPT;
                 ];
             }
             Log::warning('Failed to parse AI response', ['content' => $content]);
+
             return $this->getFallbackResponse($currentStep, '');
         }
 

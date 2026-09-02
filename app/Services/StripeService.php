@@ -4,17 +4,18 @@ namespace App\Services;
 
 use App\Models\Contact;
 use Illuminate\Support\Facades\Log;
+use Stripe\StripeClient;
 
 /**
  * Stripe payment service for raffle ticket purchases.
  */
 class StripeService
 {
-    private \Stripe\StripeClient $stripe;
+    private StripeClient $stripe;
 
     public function __construct()
     {
-        $this->stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+        $this->stripe = new StripeClient(config('services.stripe.secret'));
     }
 
     /**
@@ -51,9 +52,10 @@ class StripeService
                     ],
                 ],
                 'mode' => 'payment',
-                'success_url' => config('app.url') . '/gracias?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url' => config('app.url') . '/cancelado',
+                'success_url' => config('app.url').'/gracias?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url' => config('app.url').'/cancelado',
                 'metadata' => [
+                    'organization_id' => (string) $contact->organization_id,
                     'contact_id' => (string) $contact->id,
                     'telefono' => $contact->telefono,
                     'boletos' => (string) ($amountMxn >= 3000 ? (int) floor($amountMxn / 3000) : 0),
@@ -74,6 +76,7 @@ class StripeService
                 'error' => $e->getMessage(),
                 'contact_id' => $contact->id,
             ]);
+
             return null;
         }
     }

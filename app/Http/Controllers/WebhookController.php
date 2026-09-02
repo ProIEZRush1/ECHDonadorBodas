@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\Message;
+use App\Models\WhatsAppConnection;
 use App\Services\ConversationService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
@@ -33,12 +33,15 @@ class WebhookController extends Controller
         $token = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
 
-        if ($mode === 'subscribe' && $token === config('services.whatsapp.verify_token')) {
+        $validConnection = WhatsAppConnection::all()->first(fn (WhatsAppConnection $connection) => hash_equals((string) $connection->verify_token, (string) $token));
+        if ($mode === 'subscribe' && ($validConnection || hash_equals((string) config('services.whatsapp.verify_token'), (string) $token))) {
             Log::info('Webhook verified');
+
             return response($challenge, 200)->header('Content-Type', 'text/plain');
         }
 
         Log::warning('Webhook verification failed', ['token' => $token]);
+
         return response('Forbidden', 403);
     }
 
@@ -62,6 +65,15 @@ class WebhookController extends Controller
                 $value = $change['value'] ?? [];
 
                 if ($field === 'messages') {
+                    $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+                    $connection = $phoneNumberId ? WhatsAppConnection::where('phone_number_id', $phoneNumberId)->first() : null;
+                    if (! $connection || $connection->status !== 'connected') {
+                        Log::warning('Ignoring webhook for unknown WhatsApp number', ['phone_number_id' => $phoneNumberId]);
+
+                        continue;
+                    }
+                    app()->instance('currentOrganization', $connection->organization);
+                    $this->whatsApp->useConnection($connection);
                     $this->processStatuses($value['statuses'] ?? []);
                     $this->processMessages($value['messages'] ?? [], $value['contacts'] ?? []);
                 }
@@ -74,7 +86,7 @@ class WebhookController extends Controller
     /**
      * Process message status updates (sent, delivered, read).
      *
-     * @param array<int, array<string, mixed>> $statuses
+     * @param  array<int, array<string, mixed>>  $statuses
      */
     private function processStatuses(array $statuses): void
     {
@@ -82,7 +94,7 @@ class WebhookController extends Controller
             $waMessageId = $status['id'] ?? null;
             $newStatus = $status['status'] ?? null;
 
-            if (!$waMessageId || !$newStatus) {
+            if (! $waMessageId || ! $newStatus) {
                 continue;
             }
 
@@ -94,7 +106,7 @@ class WebhookController extends Controller
             ];
 
             $mappedStatus = $statusMap[$newStatus] ?? null;
-            if (!$mappedStatus) {
+            if (! $mappedStatus) {
                 continue;
             }
 
@@ -129,8 +141,8 @@ class WebhookController extends Controller
     /**
      * Process incoming messages.
      *
-     * @param array<int, array<string, mixed>> $messages
-     * @param array<int, array<string, mixed>> $contacts
+     * @param  array<int, array<string, mixed>>  $messages
+     * @param  array<int, array<string, mixed>>  $contacts
      */
     private function processMessages(array $messages, array $contacts): void
     {

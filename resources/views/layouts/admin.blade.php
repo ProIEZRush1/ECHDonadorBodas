@@ -1,83 +1,10 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Admin') - Rifa Boda</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        dark: { bg: '#0f0f23', sidebar: '#1a1a2e', card: '#16213e' },
-                        gold: '#D4A843',
-                        primary: '#D4A843',
-                    },
-                    fontFamily: { inter: ['Inter', 'sans-serif'] },
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-dark-bg text-gray-200 font-inter min-h-screen flex">
-    <aside class="w-64 bg-dark-sidebar border-r border-gray-800 min-h-screen flex flex-col fixed">
-        <div class="p-6 border-b border-gray-800">
-            <h1 class="text-xl font-bold text-gold">Rifa Boda</h1>
-            <p class="text-xs text-gray-500 mt-1">Hajnasat Kala</p>
-        </div>
-        <nav class="flex-1 p-4 space-y-1">
-            <a href="/admin" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin') && !request()->is('admin/*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Dashboard
-            </a>
-            <a href="/admin/donadores" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin/donadores*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Donadores
-            </a>
-            <a href="/admin/contacts" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin/contacts*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Contactos
-            </a>
-            <a href="/admin/donations" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin/donations*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Comprobantes
-            </a>
-            <a href="/admin/campaigns" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin/campaign*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Campanas
-            </a>
-            <a href="/admin/import" class="flex items-center px-4 py-2.5 rounded-lg text-sm {{ request()->is('admin/import*') ? 'bg-gold/10 text-gold' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' }}">
-                Importar CSV
-            </a>
-            <a href="/admin/export/donadores" class="flex items-center px-4 py-2.5 rounded-lg text-sm text-gray-400 hover:bg-gray-800 hover:text-gray-200">
-                Exportar Donadores
-            </a>
-        </nav>
-        <div class="p-4 border-t border-gray-800">
-            @auth
-                <p class="text-xs text-gray-500 mb-2 px-4">{{ Auth::user()->name }}</p>
-            @endauth
-            <form action="/logout" method="POST">
-                @csrf
-                <button type="submit" class="flex items-center w-full px-4 py-2 rounded-lg text-sm text-red-400 hover:bg-red-900/20">
-                    Cerrar Sesion
-                </button>
-            </form>
-        </div>
-    </aside>
-
-    <main class="flex-1 ml-64 p-8">
-        @if(session('success'))
-            <div class="mb-6 bg-green-900/30 border border-green-700 text-green-300 px-4 py-3 rounded-lg">
-                {{ session('success') }}
-            </div>
-        @endif
-        @if($errors->any())
-            <div class="mb-6 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-lg">
-                @foreach($errors->all() as $error)
-                    <p>{{ $error }}</p>
-                @endforeach
-            </div>
-        @endif
-        @yield('content')
-    </main>
-</body>
-</html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf_token() }}"><title>@yield('title','Dashboard') · Buy Overcloud</title>
+<script src="https://cdn.tailwindcss.com"></script><script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<script>tailwind.config={theme:{extend:{colors:{ink:'#12131A',cloud:'#F5F6FA',violet:'#6C5CE7',mint:'#B8F3D0'},fontFamily:{sans:['DM Sans'],display:['Manrope']},boxShadow:{soft:'0 14px 44px rgba(29,27,50,.08)'}}}}</script><style>[x-cloak]{display:none}.nav-icon{width:18px;height:18px;stroke-width:1.8}.dot-grid{background-image:radial-gradient(#d8d8e5 1px,transparent 1px);background-size:18px 18px}</style></head>
+<body class="bg-cloud text-ink font-sans min-h-screen" x-data="{menu:false}"><aside class="fixed inset-y-0 left-0 w-[260px] bg-ink text-white z-40 transform transition lg:translate-x-0" :class="menu?'translate-x-0':'-translate-x-full'"><div class="h-full flex flex-col p-5">
+<a href="/admin" class="flex items-center gap-3 px-2 py-3 mb-6"><span class="w-10 h-10 rounded-2xl bg-violet grid place-items-center shadow-lg shadow-violet/30"><svg viewBox="0 0 24 24" class="w-6 h-6 fill-none stroke-white" stroke-width="2"><path d="M5 17V8l7-4 7 4v9l-7 4-7-4Z"/><path d="m8 10 4 2 4-2M12 12v5"/></svg></span><span><strong class="font-display text-lg tracking-tight">Buy Overcloud</strong><small class="block text-[10px] uppercase tracking-[.2em] text-white/40">Conversation OS</small></span></a>
+@php $nav=[['/admin','Panel'],['/admin/contacts','Contactos'],['/admin/campaigns','Campañas'],['/admin/templates','Plantillas'],['/admin/flows','Flujos'],['/admin/integrations','WhatsApp'],['/admin/billing','Facturación']]; @endphp
+<nav class="space-y-1 flex-1">@foreach($nav as [$href,$label])<a href="{{ $href }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition {{ request()->is(ltrim($href,'/').'*')?'bg-white/10 text-white':'text-white/55 hover:bg-white/5 hover:text-white' }}"><span class="w-4 h-4 border border-current rounded-md"></span>{{ $label }}</a>@endforeach @if(auth()->user()->isSuperAdmin())<a href="/admin/clients" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm {{ request()->is('admin/clients*')?'bg-white/10':'text-white/55 hover:bg-white/5' }}"><span class="w-4 h-4 border border-current rounded-full"></span>Clientes</a>@endif</nav>
+<div class="rounded-2xl bg-white/5 border border-white/10 p-3.5 mb-3"><p class="text-[10px] uppercase tracking-widest text-white/35">Workspace</p><p class="font-semibold text-sm mt-1 truncate">{{ $currentOrganization->name ?? 'Buy Overcloud' }}</p></div><form action="/logout" method="POST">@csrf<button class="w-full text-left px-3 py-2 text-xs text-white/45 hover:text-white">Cerrar sesión · {{ Auth::user()->name }}</button></form></div></aside>
+<header class="lg:hidden h-16 px-5 flex items-center justify-between bg-white border-b"><strong class="font-display">Buy Overcloud</strong><button @click="menu=!menu" class="text-2xl">☰</button></header><main class="lg:ml-[260px] min-h-screen"><div class="max-w-[1440px] mx-auto px-5 py-7 lg:px-10 lg:py-9">@if(session('success'))<div class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-sm">{{ session('success') }}</div>@endif @if($errors->any())<div class="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif @yield('content')</div></main><div x-show="menu" x-cloak @click="menu=false" class="fixed inset-0 bg-black/40 z-30 lg:hidden"></div></body></html>

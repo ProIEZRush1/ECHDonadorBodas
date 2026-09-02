@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -9,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Setting extends Model
 {
-    protected $fillable = ['key', 'value'];
+    use BelongsToOrganization;
+
+    protected $fillable = ['organization_id', 'key', 'value'];
 
     /**
      * Get a setting value by key.

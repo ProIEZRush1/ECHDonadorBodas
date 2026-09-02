@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Campaign;
 use App\Models\Message;
+use App\Models\MessageTemplate;
 use App\Services\WhatsAppService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -17,22 +18,25 @@ class SendMassCampaign implements ShouldQueue
     use Queueable;
 
     public int $timeout = 3600;
+
     public int $tries = 1;
 
     public function __construct(
         private Campaign $campaign,
     ) {}
 
-    public function handle(WhatsAppService $whatsApp): void
+    public function handle(): void
     {
+        app()->instance('currentOrganization', $this->campaign->organization);
+        $whatsApp = app(WhatsAppService::class);
+        $template = MessageTemplate::where('name', $this->campaign->template_name)->where('status', 'approved')->firstOrFail();
         Log::info('Campaign started', ['campaign_id' => $this->campaign->id, 'total' => $this->campaign->total_contacts]);
 
         $contacts = $this->campaign->contacts()->wherePivot('status', 'pending')->get();
         $sentCount = 0;
 
         foreach ($contacts as $contact) {
-            $contactName = $contact->nombre ?? 'Amigo';
-            $result = $whatsApp->sendRaffleTemplate($contact->telefono, $contactName);
+            $result = $whatsApp->sendTemplate($contact->telefono, $template->name, [], $template->language);
 
             if ($result) {
                 $waMessageId = $result['messages'][0]['id'] ?? null;
@@ -45,7 +49,7 @@ class SendMassCampaign implements ShouldQueue
                 Message::create([
                     'contact_id' => $contact->id,
                     'direction' => 'out',
-                    'content' => "[Plantilla: rifa_boda]\nShalom {$contactName}! Te invitamos a participar en nuestra rifa solidaria para ayudar a una novia. Boletos: \$3,000 MXN. Premio: \$100,000 MXN. 100% deducible de Maaser. Sorteo: 30 de enero 2027.",
+                    'content' => "[Plantilla: {$template->name}]\n{$template->body}",
                     'wa_message_id' => $waMessageId,
                     'status' => 'sent',
                 ]);

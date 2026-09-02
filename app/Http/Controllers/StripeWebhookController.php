@@ -10,6 +10,8 @@ use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Stripe\Exception\SignatureVerificationException;
+use Stripe\Webhook;
 
 /**
  * Handles Stripe webhook events for payment confirmation.
@@ -23,12 +25,14 @@ class StripeWebhookController extends Controller
         $webhookSecret = config('services.stripe.webhook_secret');
 
         try {
-            $event = \Stripe\Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            $event = Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
+        } catch (SignatureVerificationException $e) {
             Log::warning('Stripe webhook signature verification failed', ['error' => $e->getMessage()]);
+
             return response()->json(['error' => 'Invalid signature'], 400);
         } catch (\Throwable $e) {
             Log::error('Stripe webhook error', ['error' => $e->getMessage()]);
+
             return response()->json(['error' => 'Webhook error'], 400);
         }
 
@@ -51,15 +55,23 @@ class StripeWebhookController extends Controller
         $telefono = $session->metadata->telefono ?? null;
         $amountTotal = ($session->amount_total ?? 0) / 100; // Convert from centavos
 
-        if (!$contactId) {
+        if (! $contactId) {
             Log::warning('Stripe checkout completed without contact_id', ['session_id' => $session->id]);
+
             return;
         }
 
         $contact = Contact::find($contactId);
-        if (!$contact) {
+        if (! $contact) {
             Log::warning('Contact not found for Stripe checkout', ['contact_id' => $contactId]);
+
             return;
+        }
+
+        app()->instance('currentOrganization', $contact->organization);
+        $connection = $contact->organization->whatsappConnections()->where('status', 'connected')->latest('connected_at')->first();
+        if ($connection) {
+            $whatsApp->useConnection($connection);
         }
 
         // Create donation record
@@ -89,9 +101,9 @@ class StripeWebhookController extends Controller
         // Send confirmation via WhatsApp
         $ticketText = $boletos === 1 ? '1 boleto' : "{$boletos} boletos";
         $message = "\xC2\xA1Pago recibido! \xE2\x9C\x85\n\n"
-            . "Tienes {$ticketText} para la rifa del 30 de enero de 2027.\n\n"
-            . "Que Hashem te bendiga por esta hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xF0\x9F\x92\x8D\xF0\x9F\x95\x8E\n\n"
-            . "\xC2\xA1Mucha suerte en el sorteo!";
+            ."Tienes {$ticketText} para la rifa del 30 de enero de 2027.\n\n"
+            ."Que Hashem te bendiga por esta hermosa mitzv\xC3\xA1 de Hajnasat Kal\xC3\xA1. \xF0\x9F\x92\x8D\xF0\x9F\x95\x8E\n\n"
+            ."\xC2\xA1Mucha suerte en el sorteo!";
 
         $result = $whatsApp->sendMessage($contact->telefono, $message);
 
