@@ -27,6 +27,7 @@ php artisan view:cache
 # Only the web container owns schema migrations. Queue/scheduler wait for it.
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force
+    php artisan db:seed --force
 fi
 
 # Fix permissions
