@@ -6,9 +6,12 @@ services:
     environment:
       RUN_MIGRATIONS: "true"
       QUEUE_CONNECTION: database
+      DB_HOST: db
     expose: ["8000"]
     volumes: ["app_storage:/var/www/html/storage"]
     networks: [coolify]
+    depends_on:
+      db: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/login"]
       interval: 15s
@@ -23,6 +26,7 @@ services:
     environment:
       RUN_MIGRATIONS: "false"
       QUEUE_CONNECTION: database
+      DB_HOST: db
     volumes: ["app_storage:/var/www/html/storage"]
     networks: [coolify]
     depends_on:
@@ -36,13 +40,30 @@ services:
     environment:
       RUN_MIGRATIONS: "false"
       QUEUE_CONNECTION: database
+      DB_HOST: db
     volumes: ["app_storage:/var/www/html/storage"]
     networks: [coolify]
     depends_on:
       app: {condition: service_healthy}
 
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes: ["db_data:/var/lib/mysql"]
+    networks: [coolify]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   app_storage:
+  db_data:
 
 networks:
   coolify:
