@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use App\Models\Message;
 use App\Models\WhatsAppConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -360,6 +361,16 @@ class WhatsAppService
      */
     private function sendWithRetry(string $phoneId, array $payload, int $maxRetries = 3): ?array
     {
+        if ($this->outboundMessageLimitReached()) {
+            $this->lastError = 'outbound_message_limit_reached';
+            Log::warning('WhatsApp outbound message limit reached', [
+                'organization_id' => app('currentOrganization')->id,
+                'to' => $payload['to'] ?? 'unknown',
+            ]);
+
+            return null;
+        }
+
         $url = "{$this->baseUrl}/{$this->apiVersion}/{$phoneId}/messages";
         $this->lastError = null;
 
@@ -403,5 +414,27 @@ class WhatsAppService
         ]);
 
         return null;
+    }
+
+    /**
+     * A workspace can receive a temporary outbound quota before its balance is settled.
+     * No setting means the workspace has no platform-imposed limit.
+     */
+    private function outboundMessageLimitReached(): bool
+    {
+        if (! app()->bound('currentOrganization')) {
+            return false;
+        }
+
+        $organization = app('currentOrganization');
+        $limit = data_get($organization->settings, 'outbound_message_limit');
+
+        if (! is_numeric($limit)) {
+            return false;
+        }
+
+        return Message::where('organization_id', $organization->id)
+            ->where('direction', 'out')
+            ->count() >= (int) $limit;
     }
 }
