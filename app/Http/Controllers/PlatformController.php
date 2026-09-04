@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Campaign;
+use App\Models\Contact;
+use App\Models\Message;
 use App\Models\MessageTemplate;
 use App\Models\Organization;
 use App\Models\User;
@@ -210,6 +213,27 @@ class PlatformController extends Controller
         $clients = Organization::with('users')->latest()->get();
 
         return view('platform.clients', compact('clients'));
+    }
+
+    public function superAdminOverview(): View
+    {
+        abort_unless(auth()->user()->isSuperAdmin(), 403);
+
+        $clients = Organization::with(['users:id,organization_id,email', 'whatsappConnections:id,organization_id,display_phone,status,connected_at'])
+            ->orderBy('name')->get();
+        $messages = Message::withoutGlobalScopes()->latest()->take(30)->get();
+        $contacts = Contact::withoutGlobalScopes()->whereIn('id', $messages->pluck('contact_id')->filter())->get()->keyBy('id');
+        $organizations = $clients->keyBy('id');
+        $campaigns = Campaign::withoutGlobalScopes()->latest()->take(20)->get();
+
+        $stats = [
+            'clients' => $clients->where('id', '!=', app('currentOrganization')->id)->count(),
+            'numbers' => $clients->flatMap->whatsappConnections->where('status', 'connected')->count(),
+            'outbound_today' => Message::withoutGlobalScopes()->where('direction', 'out')->whereDate('created_at', today())->count(),
+            'campaigns_active' => Campaign::withoutGlobalScopes()->where('status', 'sending')->count(),
+        ];
+
+        return view('platform.overview', compact('clients', 'messages', 'contacts', 'organizations', 'campaigns', 'stats'));
     }
 
     public function createClient(Request $request): RedirectResponse

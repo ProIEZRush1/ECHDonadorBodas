@@ -57,4 +57,5 @@ Route::middleware(['auth', 'organization'])->prefix('admin')->group(function () 
     Route::get('/billing/complete', [PlatformController::class, 'completeBilling'])->name('billing.complete');
     Route::get('/clients', [PlatformController::class, 'clients'])->name('clients');
     Route::post('/clients', [PlatformController::class, 'createClient'])->name('clients.create');
+    Route::get('/overview', [PlatformController::class, 'superAdminOverview'])->name('admin.overview');
 });
