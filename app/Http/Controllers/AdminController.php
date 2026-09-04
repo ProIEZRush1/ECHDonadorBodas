@@ -96,11 +96,15 @@ class AdminController extends Controller
         ];
 
         $organization = app('currentOrganization');
+        $outboundLimit = data_get($organization->settings, 'outbound_message_limit');
+        $outboundUsed = Message::where('direction', 'out')->count();
         $platform = [
             'connected_numbers' => $organization->whatsappConnections()->where('status', 'connected')->count(),
             'templates' => $organization->templates()->count(),
             'active_flow' => $organization->flows()->where('is_active', true)->exists(),
             'billing_active' => $organization->billingProfile?->status === 'active',
+            'outbound_limit' => is_numeric($outboundLimit) ? (int) $outboundLimit : null,
+            'outbound_used' => $outboundUsed,
         ];
 
         return view('admin.dashboard', compact('stats', 'recentContacts', 'campaigns', 'financial', 'platform'));
