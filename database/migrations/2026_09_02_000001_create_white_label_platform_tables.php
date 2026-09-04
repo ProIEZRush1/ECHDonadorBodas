@@ -36,7 +36,8 @@ return new class extends Migration
             $table->string('phone_number_id')->nullable()->unique();
             $table->string('display_phone')->nullable();
             $table->text('access_token')->nullable();
-            $table->string('verify_token')->nullable();
+            // Encrypted casts exceed varchar(255), even for short raw tokens.
+            $table->text('verify_token')->nullable();
             $table->string('status', 30)->default('pending');
             $table->timestamp('connected_at')->nullable();
             $table->timestamps();
