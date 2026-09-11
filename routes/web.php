@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -10,6 +11,11 @@ Route::get('/', fn () => redirect('/login'));
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Backwards-compatible WhatsApp callback. The Meta app may be configured with
+// /webhook instead of the API-prefixed /api/webhook endpoint.
+Route::get('/webhook', [WebhookController::class, 'verify']);
+Route::post('/webhook', [WebhookController::class, 'handle']);
 
 // Admin panel (auth required)
 Route::middleware(['auth', 'organization'])->prefix('admin')->group(function () {
