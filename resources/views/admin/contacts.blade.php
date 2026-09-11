@@ -3,7 +3,11 @@
 
 @section('content')
 <div class="flex items-center justify-between mb-6">
-    <h2 class="text-2xl font-bold text-gold">Contactos</h2>
+    <div>
+        <h2 class="text-2xl font-bold text-gold">Contactos</h2>
+        <p class="text-sm text-gray-500 mt-1">Carga tu lista y úsala después en Campañas.</p>
+    </div>
+    <a href="/admin/import" class="bg-gold text-dark-bg px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gold/80">Importar contactos</a>
 </div>
 
 {{-- Filters --}}
