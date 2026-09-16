@@ -29,7 +29,10 @@ class SendMassCampaign implements ShouldQueue
     {
         app()->instance('currentOrganization', $this->campaign->organization);
         $whatsApp = app(WhatsAppService::class);
-        $template = MessageTemplate::where('name', $this->campaign->template_name)->where('status', 'approved')->firstOrFail();
+        $template = MessageTemplate::where('organization_id', $this->campaign->organization_id)
+            ->where('name', $this->campaign->template_name)
+            ->where('status', 'approved')
+            ->firstOrFail();
         Log::info('Campaign started', ['campaign_id' => $this->campaign->id, 'total' => $this->campaign->total_contacts]);
 
         $contacts = $this->campaign->contacts()->wherePivot('status', 'pending')->get();

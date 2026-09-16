@@ -27,6 +27,97 @@ class WhatsAppService
 
     private ?string $lastError = null;
 
+    /**
+     * Check the delivery readiness of a connected Cloud API number.
+     *
+     * A successful /messages response only means Meta accepted the request. A
+     * declined display name can prevent a business number from delivering
+     * outbound messages, so campaigns must not be launched in that state.
+     *
+     * @return array{ready: bool, reason: string|null, status: string|null, name_status: string|null}
+     */
+    public function connectionReadiness(WhatsAppConnection $connection): array
+    {
+        if ($connection->status !== 'connected' || blank($connection->waba_id) || blank($connection->phone_number_id) || blank($connection->access_token)) {
+            return [
+                'ready' => false,
+                'reason' => 'El número de WhatsApp no está conectado correctamente.',
+                'status' => $connection->status,
+                'name_status' => null,
+            ];
+        }
+
+        try {
+            $response = Http::withToken($connection->access_token)
+                ->timeout(15)
+                ->get("{$this->baseUrl}/{$this->apiVersion}/{$connection->waba_id}/phone_numbers", [
+                    'fields' => 'id,status,name_status',
+                ]);
+        } catch (ConnectionException $e) {
+            Log::warning('Unable to check WhatsApp connection readiness', ['connection_id' => $connection->id]);
+
+            return [
+                'ready' => false,
+                'reason' => 'No se pudo validar el estado del número con Meta. Intenta de nuevo en unos minutos.',
+                'status' => null,
+                'name_status' => null,
+            ];
+        }
+
+        if (! $response->successful()) {
+            Log::warning('WhatsApp connection readiness check failed', [
+                'connection_id' => $connection->id,
+                'status' => $response->status(),
+            ]);
+
+            return [
+                'ready' => false,
+                'reason' => 'Meta no permitió validar el estado del número. Revisa la conexión antes de enviar.',
+                'status' => null,
+                'name_status' => null,
+            ];
+        }
+
+        $phone = collect($response->json('data', []))
+            ->firstWhere('id', (string) $connection->phone_number_id);
+        $status = data_get($phone, 'status');
+        $nameStatus = data_get($phone, 'name_status');
+
+        if ($status !== 'CONNECTED') {
+            return [
+                'ready' => false,
+                'reason' => 'El número no está conectado en Meta.',
+                'status' => $status,
+                'name_status' => $nameStatus,
+            ];
+        }
+
+        if ($nameStatus === 'DECLINED') {
+            return [
+                'ready' => false,
+                'reason' => 'Meta rechazó el nombre visible del número. Corrígelo y reenvíalo a revisión antes de lanzar una campaña.',
+                'status' => $status,
+                'name_status' => $nameStatus,
+            ];
+        }
+
+        if (! in_array($nameStatus, ['APPROVED', 'AVAILABLE_WITHOUT_REVIEW'], true)) {
+            return [
+                'ready' => false,
+                'reason' => 'El nombre visible del número sigue pendiente de aprobación de Meta.',
+                'status' => $status,
+                'name_status' => $nameStatus,
+            ];
+        }
+
+        return [
+            'ready' => true,
+            'reason' => null,
+            'status' => $status,
+            'name_status' => $nameStatus,
+        ];
+    }
+
     public function __construct()
     {
         $this->baseUrl = config('services.whatsapp.base_url', 'https://graph.facebook.com');

@@ -416,7 +416,25 @@ class AdminController extends Controller
             'template_name' => 'required|string|max:100',
         ]);
 
-        abort_unless(MessageTemplate::where('name', $request->input('template_name'))->where('status', 'approved')->exists(), 422, 'Selecciona una plantilla aprobada.');
+        $organization = app('currentOrganization');
+        $template = $organization->templates()
+            ->where('name', $request->input('template_name'))
+            ->where('status', 'approved')
+            ->first();
+        abort_unless($template, 422, 'Selecciona una plantilla aprobada.');
+
+        $connection = $organization->whatsappConnections()
+            ->where('status', 'connected')
+            ->latest('connected_at')
+            ->first();
+        if (! $connection) {
+            return back()->withErrors(['campaign' => 'Conecta un número de WhatsApp antes de lanzar una campaña.']);
+        }
+
+        $readiness = app(\App\Services\WhatsAppService::class)->connectionReadiness($connection);
+        if (! $readiness['ready']) {
+            return back()->withErrors(['campaign' => $readiness['reason']]);
+        }
 
         $audience = $request->input('audiencia');
         $pais = $request->input('pais');
